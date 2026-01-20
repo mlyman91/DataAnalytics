@@ -509,7 +509,9 @@ Object.assign(App, {
 
         // Check if multi-year mode
         const isMultiYear = aggregationResults.isMultiYear;
-        const fiscalYears = isMultiYear ? this.state.detectedFiscalYears.filter(y => y.fullyCovered) : [];
+        const fiscalYears = isMultiYear ?
+            this.state.detectedFiscalYears.filter(fy => this.state.selectedFiscalYears.includes(fy.fiscalYear)) :
+            [];
 
         UIRenderer.renderDetailTableBody(results, selectedDimensions, mode, currentPage, 50, isMultiYear, fiscalYears);
     },

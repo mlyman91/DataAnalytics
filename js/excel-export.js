@@ -577,27 +577,41 @@ const ExcelExport = {
     _createAssumptionsSheet: function(config, stats, mode) {
         const data = [];
         const methodology = BridgeCalculator.getMethodologyDescription(mode, config.gmPriceDefinition);
-        
+
         data.push(['Analysis Assumptions & Methodology']);
         data.push([`Generated: ${new Date().toLocaleString()}`]);
         data.push([]);
-        
+
         // Configuration
         data.push(['Analysis Configuration']);
         data.push(['Parameter', 'Value']);
         data.push(['Analysis Mode', mode === 'gm' ? 'Gross Margin Bridge' : 'Sales PVM Bridge']);
-        
+
         if (mode === 'gm') {
-            data.push(['GM Price Definition', 
-                config.gmPriceDefinition === 'margin-per-unit' ? 
+            data.push(['GM Price Definition',
+                config.gmPriceDefinition === 'margin-per-unit' ?
                     'Margin per Unit: (Sales - Cost) / Quantity' :
                     'Sales per Unit: Sales / Quantity'
             ]);
         }
-        
+
         data.push(['Fiscal Year End Month', CONFIG.MONTH_NAMES[config.fyEndMonth - 1]]);
-        data.push(['Prior Year Period', PeriodUtils.formatDateRange(config.pyRange.start, config.pyRange.end)]);
-        data.push(['LTM Period', PeriodUtils.formatDateRange(config.cyRange.start, config.cyRange.end)]);
+
+        // Add period information based on mode
+        if (config.fiscalYears && config.fiscalYears.length > 0) {
+            // Multi-year mode
+            const yearLabels = config.fiscalYears.map(fy => fy.label || `FY ${fy.fiscalYear}`).join(', ');
+            const firstYear = config.fiscalYears[0];
+            const lastYear = config.fiscalYears[config.fiscalYears.length - 1];
+            data.push(['Analysis Type', 'Multi-Year Comparison']);
+            data.push(['Fiscal Years', yearLabels]);
+            data.push(['Date Range', `${PeriodUtils.formatDate(firstYear.start)} to ${PeriodUtils.formatDate(lastYear.end)}`]);
+        } else if (config.pyRange && config.cyRange) {
+            // Two-period mode
+            data.push(['Prior Year Period', PeriodUtils.formatDateRange(config.pyRange.start, config.pyRange.end)]);
+            data.push(['LTM Period', PeriodUtils.formatDateRange(config.cyRange.start, config.cyRange.end)]);
+        }
+
         data.push(['Level of Detail Dimensions', config.dimensions.length > 0 ? config.dimensions.join(', ') : 'Total Only']);
         data.push([]);
         
