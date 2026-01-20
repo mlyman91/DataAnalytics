@@ -47,21 +47,30 @@ Object.assign(App, {
                         <p><strong>Total Rows:</strong> ${rowCount.toLocaleString()}</p>`;
 
                     // Show detected fiscal years
-                    if (fullYears.length >= 2) {
-                        const yearLabels = fullYears.map(y => y.label).join(', ');
-                        dateRangeHTML += `<p><strong>Detected Fiscal Years:</strong> ${yearLabels}</p>
-                        <p style="color: var(--color-success); font-weight: 600;">✓ Multi-year analysis available (${fullYears.length} complete years)</p>`;
+                    if (fiscalYears.length >= 2) {
+                        const yearLabels = fiscalYears.map(y => y.label).join(', ');
+                        const completeCount = fullYears.length;
+                        const partialCount = fiscalYears.length - completeCount;
 
-                        // Show multi-year section and hide two-period config
-                        this.showMultiYearSelection(fullYears);
-                    } else if (fullYears.length === 1) {
-                        dateRangeHTML += `<p><strong>Detected:</strong> ${fullYears[0].label} (partial data for other years)</p>`;
+                        dateRangeHTML += `<p><strong>Detected Fiscal Years:</strong> ${yearLabels}</p>`;
+                        if (completeCount >= 2) {
+                            dateRangeHTML += `<p style="color: var(--color-success); font-weight: 600;">✓ Multi-year analysis available (${completeCount} complete, ${partialCount} partial)</p>`;
+                        } else if (completeCount === 1) {
+                            dateRangeHTML += `<p style="color: var(--color-info);">⚠ ${completeCount} complete year, ${partialCount} partial. You can still analyze partial years.</p>`;
+                        } else {
+                            dateRangeHTML += `<p style="color: var(--color-warning);">⚠ All years have partial data. Results may be incomplete.</p>`;
+                        }
+
+                        // Show multi-year section with ALL fiscal years (including partial)
+                        this.showMultiYearSelection(fiscalYears);
+                    } else if (fiscalYears.length === 1) {
+                        dateRangeHTML += `<p><strong>Detected:</strong> ${fiscalYears[0].label}</p>`;
 
                         // Show two-period config and hide multi-year section
                         document.getElementById('multi-year-section').style.display = 'none';
                         document.getElementById('two-period-config').style.display = 'block';
                     } else {
-                        // No complete years, show two-period config
+                        // No fiscal years detected, show two-period config
                         document.getElementById('multi-year-section').style.display = 'none';
                         document.getElementById('two-period-config').style.display = 'block';
                     }
@@ -122,10 +131,16 @@ Object.assign(App, {
             checkbox.addEventListener('change', () => this.updateFiscalYearSelection());
 
             const textContainer = UIRenderer.createElement('div');
-            const fyLabel = UIRenderer.createElement('div', { className: 'fy-label' }, [fyConfig.label]);
-            const dateRange = UIRenderer.createElement('div', { className: 'fy-date-range' }, [
-                `${PeriodUtils.formatDate(fyConfig.start)} - ${PeriodUtils.formatDate(fyConfig.end)}`
-            ]);
+
+            // Add warning icon if not fully covered
+            const labelText = fyConfig.fullyCovered ? fyConfig.label : `${fyConfig.label} ⚠`;
+            const fyLabel = UIRenderer.createElement('div', { className: 'fy-label' }, [labelText]);
+
+            const dateRangeText = fyConfig.fullyCovered ?
+                `${PeriodUtils.formatDate(fyConfig.start)} - ${PeriodUtils.formatDate(fyConfig.end)}` :
+                `${PeriodUtils.formatDate(fyConfig.start)} - ${PeriodUtils.formatDate(fyConfig.end)} (partial)`;
+
+            const dateRange = UIRenderer.createElement('div', { className: 'fy-date-range' }, [dateRangeText]);
 
             textContainer.appendChild(fyLabel);
             textContainer.appendChild(dateRange);

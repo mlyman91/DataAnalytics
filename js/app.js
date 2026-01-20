@@ -158,14 +158,13 @@ const App = {
                     this.state.fyEndMonth
                 );
                 this.state.detectedFiscalYears = fiscalYears;
-                const fullYears = fiscalYears.filter(y => y.fullyCovered);
-                this.state.hasMultipleYears = fullYears.length >= 2;
+                this.state.hasMultipleYears = fiscalYears.length >= 2;
 
-                // If in multi-year mode, update the selection UI
-                if (this.state.hasMultipleYears && fullYears.length >= 2) {
+                // If we have multiple years (even partial), show multi-year selection
+                if (fiscalYears.length >= 2) {
                     // Reset selected years when FY end changes
                     this.state.selectedFiscalYears = [];
-                    this.showMultiYearSelection(fullYears);
+                    this.showMultiYearSelection(fiscalYears);
                 } else {
                     // Switch to two-period mode
                     document.getElementById('multi-year-section').style.display = 'none';
