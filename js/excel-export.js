@@ -143,110 +143,221 @@ const ExcelExport = {
         const data = [];
         const dimensions = config.dimensions || [];
 
-        // Determine fiscal year labels
-        const pyLabel = config.pyLabel || 'PY';
-        const cyLabel = config.cyLabel || 'CY';
+        // Check if multi-year mode
+        const isMultiYear = config.fiscalYears && config.fiscalYears.length > 0;
+        const fiscalYears = isMultiYear ? config.fiscalYears : [];
 
-        // Header row with actual fiscal year labels
-        const headerRow = [
-            ...dimensions,
-            'Status',
-            `${pyLabel} Sales`,
-            `${pyLabel} Volume`,
-            `${pyLabel} Avg Price`,
-            `${cyLabel} Sales`,
-            `${cyLabel} Volume`,
-            `${cyLabel} Avg Price`,
-            'Total Change',
-            'Price Impact',
-            'Volume Impact',
-            'Mix Impact'
-        ];
+        let headerRow;
 
-        if (config.mode === 'gm') {
-            headerRow.push('Cost Impact');
+        if (isMultiYear) {
+            // Multi-year mode: header with all years and YoY bridges
+            headerRow = [...dimensions];
+
+            for (let i = 0; i < fiscalYears.length; i++) {
+                const fy = fiscalYears[i];
+                const fyLabel = fy.label || `FY ${fy.fiscalYear}`;
+
+                // Year columns
+                headerRow.push(`${fyLabel} Sales`);
+                headerRow.push(`${fyLabel} Volume`);
+                headerRow.push(`${fyLabel} Avg Price`);
+
+                // YoY bridge columns (between this year and next)
+                if (i < fiscalYears.length - 1) {
+                    const nextFY = fiscalYears[i + 1];
+                    const bridgeLabel = `${fy.fiscalYear}→${nextFY.fiscalYear}`;
+                    headerRow.push(`${bridgeLabel} Price Δ`);
+                    headerRow.push(`${bridgeLabel} Vol Δ`);
+                    headerRow.push(`${bridgeLabel} Mix Δ`);
+
+                    if (config.mode === 'gm') {
+                        headerRow.push(`${bridgeLabel} Cost Δ`);
+                    }
+                }
+            }
+        } else {
+            // Two-period mode: original behavior
+            const pyLabel = config.pyLabel || 'PY';
+            const cyLabel = config.cyLabel || 'CY';
+
+            headerRow = [
+                ...dimensions,
+                'Status',
+                `${pyLabel} Sales`,
+                `${pyLabel} Volume`,
+                `${pyLabel} Avg Price`,
+                `${cyLabel} Sales`,
+                `${cyLabel} Volume`,
+                `${cyLabel} Avg Price`,
+                'Total Change',
+                'Price Impact',
+                'Volume Impact',
+                'Mix Impact'
+            ];
+
+            if (config.mode === 'gm') {
+                headerRow.push('Cost Impact');
+            }
         }
 
         data.push(headerRow);
 
-        // Data rows with formulas for bridge calculations
+        // Data rows
         for (let i = 0; i < detail.length; i++) {
             const row = detail[i];
-            const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
-            const dimCount = dimensions.length;
 
-            // Base columns: dimensions + status + PY sales/vol/price + CY sales/vol/price
-            const dataRow = [
-                ...dimensions.map(d => row.dimensions[d] || 'Unknown'),
-                row.classification,
-                row.py.sales,
-                row.py.volume,
-                row.py.price,
-                row.cy.sales,
-                row.cy.volume,
-                row.cy.price
-            ];
+            if (isMultiYear) {
+                // Multi-year mode: populate all years
+                const dataRow = [...dimensions.map(d => row.dimensions[d] || 'Unknown')];
 
-            data.push(dataRow);
+                for (let j = 0; j < fiscalYears.length; j++) {
+                    const fy = fiscalYears[j].fiscalYear;
+                    const yearData = row.years[fy] || { sales: 0, volume: 0, price: 0 };
+
+                    // Year data
+                    dataRow.push(yearData.sales);
+                    dataRow.push(yearData.volume);
+                    dataRow.push(yearData.price);
+
+                    // YoY bridge values (will be replaced with formulas below)
+                    if (j < fiscalYears.length - 1) {
+                        dataRow.push(0); // Price Δ (formula)
+                        dataRow.push(0); // Vol Δ (formula)
+                        dataRow.push(0); // Mix Δ (formula)
+
+                        if (config.mode === 'gm') {
+                            dataRow.push(0); // Cost Δ (formula)
+                        }
+                    }
+                }
+
+                data.push(dataRow);
+            } else {
+                // Two-period mode: original behavior
+                const dataRow = [
+                    ...dimensions.map(d => row.dimensions[d] || 'Unknown'),
+                    row.classification,
+                    row.py.sales,
+                    row.py.volume,
+                    row.py.price,
+                    row.cy.sales,
+                    row.cy.volume,
+                    row.cy.price
+                ];
+
+                data.push(dataRow);
+            }
         }
 
         // Create worksheet from data
         const ws = XLSX.utils.aoa_to_sheet(data);
 
+        // Column letter helper
+        const colLetter = (col) => {
+            let letter = '';
+            let num = col;
+            while (num >= 0) {
+                letter = String.fromCharCode((num % 26) + 65) + letter;
+                num = Math.floor(num / 26) - 1;
+            }
+            return letter;
+        };
+
         // Now add formulas for bridge calculations
         const dimCount = dimensions.length;
-        const statusCol = dimCount;
-        const pySalesCol = dimCount + 1;
-        const pyVolCol = dimCount + 2;
-        const pyPriceCol = dimCount + 3;
-        const cySalesCol = dimCount + 4;
-        const cyVolCol = dimCount + 5;
-        const cyPriceCol = dimCount + 6;
-        const totalChangeCol = dimCount + 7;
-        const priceImpactCol = dimCount + 8;
-        const volumeImpactCol = dimCount + 9;
-        const mixImpactCol = dimCount + 10;
 
-        // Add formulas for each row
-        for (let i = 0; i < detail.length; i++) {
-            const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
+        if (isMultiYear) {
+            // Multi-year mode: add formulas for YoY bridges
+            for (let i = 0; i < detail.length; i++) {
+                const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
+                let colIndex = dimCount;
 
-            // Column letter helper
-            const colLetter = (col) => {
-                let letter = '';
-                let num = col;
-                while (num >= 0) {
-                    letter = String.fromCharCode((num % 26) + 65) + letter;
-                    num = Math.floor(num / 26) - 1;
+                for (let j = 0; j < fiscalYears.length; j++) {
+                    // Year columns: Sales, Volume, Price
+                    const salesCol = colIndex++;
+                    const volCol = colIndex++;
+                    const priceCol = colIndex++;
+
+                    // YoY bridge formulas (between this year and next)
+                    if (j < fiscalYears.length - 1) {
+                        // Get next year column indices
+                        const nextSalesCol = colIndex + (config.mode === 'gm' ? 4 : 3);
+                        const nextVolCol = nextSalesCol + 1;
+                        const nextPriceCol = nextSalesCol + 2;
+
+                        // Price Impact = (Next Price - This Price) × This Volume
+                        const priceImpactCol = colIndex++;
+                        ws[`${colLetter(priceImpactCol)}${rowNum}`] = {
+                            f: `(${colLetter(nextPriceCol)}${rowNum}-${colLetter(priceCol)}${rowNum})*${colLetter(volCol)}${rowNum}`,
+                            t: 'n'
+                        };
+
+                        // Volume Impact = (Next Volume - This Volume) × This Price
+                        const volImpactCol = colIndex++;
+                        ws[`${colLetter(volImpactCol)}${rowNum}`] = {
+                            f: `(${colLetter(nextVolCol)}${rowNum}-${colLetter(volCol)}${rowNum})*${colLetter(priceCol)}${rowNum}`,
+                            t: 'n'
+                        };
+
+                        // Mix Impact = (Next Sales - This Sales) - Price Impact - Volume Impact
+                        const mixImpactCol = colIndex++;
+                        ws[`${colLetter(mixImpactCol)}${rowNum}`] = {
+                            f: `(${colLetter(nextSalesCol)}${rowNum}-${colLetter(salesCol)}${rowNum})-${colLetter(priceImpactCol)}${rowNum}-${colLetter(volImpactCol)}${rowNum}`,
+                            t: 'n'
+                        };
+
+                        if (config.mode === 'gm') {
+                            // Cost Impact (placeholder for now)
+                            const costImpactCol = colIndex++;
+                            ws[`${colLetter(costImpactCol)}${rowNum}`] = { v: 0, t: 'n' };
+                        }
+                    }
                 }
-                return letter;
-            };
+            }
+        } else {
+            // Two-period mode: original formulas
+            const statusCol = dimCount;
+            const pySalesCol = dimCount + 1;
+            const pyVolCol = dimCount + 2;
+            const pyPriceCol = dimCount + 3;
+            const cySalesCol = dimCount + 4;
+            const cyVolCol = dimCount + 5;
+            const cyPriceCol = dimCount + 6;
+            const totalChangeCol = dimCount + 7;
+            const priceImpactCol = dimCount + 8;
+            const volumeImpactCol = dimCount + 9;
+            const mixImpactCol = dimCount + 10;
 
-            const pySales = `${colLetter(pySalesCol)}${rowNum}`;
-            const pyVol = `${colLetter(pyVolCol)}${rowNum}`;
-            const pyPrice = `${colLetter(pyPriceCol)}${rowNum}`;
-            const cySales = `${colLetter(cySalesCol)}${rowNum}`;
-            const cyVol = `${colLetter(cyVolCol)}${rowNum}`;
-            const cyPrice = `${colLetter(cyPriceCol)}${rowNum}`;
-            const totalChange = `${colLetter(totalChangeCol)}${rowNum}`;
-            const priceImpact = `${colLetter(priceImpactCol)}${rowNum}`;
-            const volumeImpact = `${colLetter(volumeImpactCol)}${rowNum}`;
+            // Add formulas for each row
+            for (let i = 0; i < detail.length; i++) {
+                const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
 
-            // Total Change = CY Sales - PY Sales
-            ws[totalChange] = { f: `${cySales}-${pySales}`, t: 'n' };
+                const pySales = `${colLetter(pySalesCol)}${rowNum}`;
+                const pyVol = `${colLetter(pyVolCol)}${rowNum}`;
+                const pyPrice = `${colLetter(pyPriceCol)}${rowNum}`;
+                const cySales = `${colLetter(cySalesCol)}${rowNum}`;
+                const cyVol = `${colLetter(cyVolCol)}${rowNum}`;
+                const cyPrice = `${colLetter(cyPriceCol)}${rowNum}`;
+                const totalChange = `${colLetter(totalChangeCol)}${rowNum}`;
+                const priceImpact = `${colLetter(priceImpactCol)}${rowNum}`;
+                const volumeImpact = `${colLetter(volumeImpactCol)}${rowNum}`;
 
-            // Price Impact = (CY Price - PY Price) × PY Volume
-            ws[priceImpact] = { f: `(${cyPrice}-${pyPrice})*${pyVol}`, t: 'n' };
+                // Total Change = CY Sales - PY Sales
+                ws[totalChange] = { f: `${cySales}-${pySales}`, t: 'n' };
 
-            // Volume Impact = (CY Volume - PY Volume) × PY Price
-            ws[volumeImpact] = { f: `(${cyVol}-${pyVol})*${pyPrice}`, t: 'n' };
+                // Price Impact = (CY Price - PY Price) × PY Volume
+                ws[priceImpact] = { f: `(${cyPrice}-${pyPrice})*${pyVol}`, t: 'n' };
 
-            // Mix Impact = Total Change - Price Impact - Volume Impact
-            ws[`${colLetter(mixImpactCol)}${rowNum}`] = { f: `${totalChange}-${priceImpact}-${volumeImpact}`, t: 'n' };
+                // Volume Impact = (CY Volume - PY Volume) × PY Price
+                ws[volumeImpact] = { f: `(${cyVol}-${pyVol})*${pyPrice}`, t: 'n' };
 
-            if (config.mode === 'gm') {
-                // Add Cost Impact formula if needed
-                // For now, we'll skip this as it's more complex
+                // Mix Impact = Total Change - Price Impact - Volume Impact
+                ws[`${colLetter(mixImpactCol)}${rowNum}`] = { f: `${totalChange}-${priceImpact}-${volumeImpact}`, t: 'n' };
+
+                if (config.mode === 'gm') {
+                    // Add Cost Impact formula if needed
+                    // For now, we'll skip this as it's more complex
+                }
             }
         }
         

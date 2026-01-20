@@ -224,7 +224,7 @@ const UIRenderer = {
     /**
      * Render detail table header
      */
-    renderDetailTableHeader: function(dimensions, mode, pyLabel, cyLabel) {
+    renderDetailTableHeader: function(dimensions, mode, pyLabel, cyLabel, isMultiYear = false, fiscalYears = []) {
         const thead = document.getElementById('detail-table-head');
         this.clearElement(thead);
 
@@ -235,27 +235,55 @@ const UIRenderer = {
             tr.appendChild(this.createElement('th', {}, [dim]));
         }
 
-        // Classification
-        tr.appendChild(this.createElement('th', {}, ['Status']));
+        if (isMultiYear && fiscalYears.length > 0) {
+            // Multi-year mode: show all years with bridges between them
+            for (let i = 0; i < fiscalYears.length; i++) {
+                const fy = fiscalYears[i];
+                const fyLabel = fy.label || `FY ${fy.fiscalYear}`;
 
-        // PY values by metric
-        tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Sales`]));
-        tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Volume`]));
-        tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Avg Price`]));
+                // Year metrics
+                tr.appendChild(this.createElement('th', { className: 'num' }, [`${fyLabel} Sales`]));
+                tr.appendChild(this.createElement('th', { className: 'num' }, [`${fyLabel} Vol`]));
+                tr.appendChild(this.createElement('th', { className: 'num' }, [`${fyLabel} Price`]));
 
-        // CY values by metric
-        tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Sales`]));
-        tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Volume`]));
-        tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Avg Price`]));
+                // YoY bridge (except for the last year)
+                if (i < fiscalYears.length - 1) {
+                    const nextFY = fiscalYears[i + 1];
+                    const bridgeLabel = `${fy.fiscalYear}→${nextFY.fiscalYear}`;
 
-        // Bridge components
-        tr.appendChild(this.createElement('th', { className: 'num' }, ['Total Change']));
-        tr.appendChild(this.createElement('th', { className: 'num' }, ['Price Impact']));
-        tr.appendChild(this.createElement('th', { className: 'num' }, ['Volume Impact']));
-        tr.appendChild(this.createElement('th', { className: 'num' }, ['Mix Impact']));
+                    tr.appendChild(this.createElement('th', { className: 'num' }, [`${bridgeLabel} Price Δ`]));
+                    tr.appendChild(this.createElement('th', { className: 'num' }, [`${bridgeLabel} Vol Δ`]));
+                    tr.appendChild(this.createElement('th', { className: 'num' }, [`${bridgeLabel} Mix Δ`]));
 
-        if (mode === 'gm') {
-            tr.appendChild(this.createElement('th', { className: 'num' }, ['Cost Impact']));
+                    if (mode === 'gm') {
+                        tr.appendChild(this.createElement('th', { className: 'num' }, [`${bridgeLabel} Cost Δ`]));
+                    }
+                }
+            }
+        } else {
+            // Two-period mode: original layout
+            // Classification
+            tr.appendChild(this.createElement('th', {}, ['Status']));
+
+            // PY values by metric
+            tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Sales`]));
+            tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Volume`]));
+            tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Avg Price`]));
+
+            // CY values by metric
+            tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Sales`]));
+            tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Volume`]));
+            tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Avg Price`]));
+
+            // Bridge components
+            tr.appendChild(this.createElement('th', { className: 'num' }, ['Total Change']));
+            tr.appendChild(this.createElement('th', { className: 'num' }, ['Price Impact']));
+            tr.appendChild(this.createElement('th', { className: 'num' }, ['Volume Impact']));
+            tr.appendChild(this.createElement('th', { className: 'num' }, ['Mix Impact']));
+
+            if (mode === 'gm') {
+                tr.appendChild(this.createElement('th', { className: 'num' }, ['Cost Impact']));
+            }
         }
 
         thead.appendChild(tr);
@@ -264,78 +292,130 @@ const UIRenderer = {
     /**
      * Render detail table body (paginated)
      */
-    renderDetailTableBody: function(results, dimensions, mode, page = 1, pageSize = 50) {
+    renderDetailTableBody: function(results, dimensions, mode, page = 1, pageSize = 50, isMultiYear = false, fiscalYears = []) {
         const tbody = document.getElementById('detail-table-body');
         this.clearElement(tbody);
-        
+
         const start = (page - 1) * pageSize;
         const end = Math.min(start + pageSize, results.length);
         const pageResults = results.slice(start, end);
-        
+
         for (const result of pageResults) {
             const tr = this.createElement('tr');
-            
+
             // Dimension values
             for (const dim of dimensions) {
                 tr.appendChild(this.createElement('td', {}, [result.dimensions[dim] || '--']));
             }
-            
-            // Classification
-            const statusClass = result.classification === 'new' ? 'positive' :
-                               result.classification === 'discontinued' ? 'negative' : '';
-            tr.appendChild(this.createElement('td', { className: statusClass }, [
-                result.classification.charAt(0).toUpperCase() + result.classification.slice(1)
-            ]));
 
-            // PY values: Sales, Volume, Avg Price
-            tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.py.sales, 'currency')
-            ]));
-            tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.py.volume, 'number')
-            ]));
-            tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.py.price, 'currency')
-            ]));
+            if (isMultiYear && fiscalYears.length > 0) {
+                // Multi-year mode: show all years and YoY bridges
 
-            // CY values: Sales, Volume, Avg Price
-            tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.cy.sales, 'currency')
-            ]));
-            tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.cy.volume, 'number')
-            ]));
-            tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.cy.price, 'currency')
-            ]));
+                for (let i = 0; i < fiscalYears.length; i++) {
+                    const fy = fiscalYears[i].fiscalYear;
+                    const yearData = result.years[fy] || { sales: 0, volume: 0, price: 0 };
 
-            // Bridge components
-            const totalClass = 'num ' + (result.totalChange >= 0 ? 'positive' : 'negative');
-            tr.appendChild(this.createElement('td', { className: totalClass }, [
-                this.formatNumber(result.totalChange, 'currency')
-            ]));
-            
-            tr.appendChild(this.createElement('td', { 
-                className: 'num ' + (result.priceImpact >= 0 ? 'positive' : 'negative')
-            }, [this.formatNumber(result.priceImpact, 'currency')]));
-            
-            tr.appendChild(this.createElement('td', { 
-                className: 'num ' + (result.volumeImpact >= 0 ? 'positive' : 'negative')
-            }, [this.formatNumber(result.volumeImpact, 'currency')]));
-            
-            tr.appendChild(this.createElement('td', { 
-                className: 'num ' + (result.mixImpact >= 0 ? 'positive' : 'negative')
-            }, [this.formatNumber(result.mixImpact, 'currency')]));
-            
-            if (mode === 'gm') {
-                tr.appendChild(this.createElement('td', { 
-                    className: 'num ' + (result.costImpact >= 0 ? 'positive' : 'negative')
-                }, [this.formatNumber(result.costImpact, 'currency')]));
+                    // Year metrics: Sales, Volume, Price
+                    tr.appendChild(this.createElement('td', { className: 'num' }, [
+                        this.formatNumber(yearData.sales, 'currency')
+                    ]));
+                    tr.appendChild(this.createElement('td', { className: 'num' }, [
+                        this.formatNumber(yearData.volume, 'number')
+                    ]));
+                    tr.appendChild(this.createElement('td', { className: 'num' }, [
+                        this.formatNumber(yearData.price, 'currency')
+                    ]));
+
+                    // YoY bridge columns (between this year and next)
+                    if (i < fiscalYears.length - 1) {
+                        const nextFY = fiscalYears[i + 1].fiscalYear;
+                        const bridgeKey = `${fy}-${nextFY}`;
+                        const bridge = result.bridges[bridgeKey] || {
+                            priceImpact: 0,
+                            volumeImpact: 0,
+                            mixImpact: 0
+                        };
+
+                        tr.appendChild(this.createElement('td', {
+                            className: 'num ' + (bridge.priceImpact >= 0 ? 'positive' : 'negative')
+                        }, [this.formatNumber(bridge.priceImpact, 'currency')]));
+
+                        tr.appendChild(this.createElement('td', {
+                            className: 'num ' + (bridge.volumeImpact >= 0 ? 'positive' : 'negative')
+                        }, [this.formatNumber(bridge.volumeImpact, 'currency')]));
+
+                        tr.appendChild(this.createElement('td', {
+                            className: 'num ' + (bridge.mixImpact >= 0 ? 'positive' : 'negative')
+                        }, [this.formatNumber(bridge.mixImpact, 'currency')]));
+
+                        if (mode === 'gm') {
+                            tr.appendChild(this.createElement('td', {
+                                className: 'num ' + (bridge.costImpact >= 0 ? 'positive' : 'negative')
+                            }, [this.formatNumber(bridge.costImpact || 0, 'currency')]));
+                        }
+                    }
+                }
+
+            } else {
+                // Two-period mode (original behavior)
+
+                // Classification
+                const statusClass = result.classification === 'new' ? 'positive' :
+                                   result.classification === 'discontinued' ? 'negative' : '';
+                tr.appendChild(this.createElement('td', { className: statusClass }, [
+                    result.classification.charAt(0).toUpperCase() + result.classification.slice(1)
+                ]));
+
+                // PY values: Sales, Volume, Avg Price
+                tr.appendChild(this.createElement('td', { className: 'num' }, [
+                    this.formatNumber(result.py.sales, 'currency')
+                ]));
+                tr.appendChild(this.createElement('td', { className: 'num' }, [
+                    this.formatNumber(result.py.volume, 'number')
+                ]));
+                tr.appendChild(this.createElement('td', { className: 'num' }, [
+                    this.formatNumber(result.py.price, 'currency')
+                ]));
+
+                // CY values: Sales, Volume, Avg Price
+                tr.appendChild(this.createElement('td', { className: 'num' }, [
+                    this.formatNumber(result.cy.sales, 'currency')
+                ]));
+                tr.appendChild(this.createElement('td', { className: 'num' }, [
+                    this.formatNumber(result.cy.volume, 'number')
+                ]));
+                tr.appendChild(this.createElement('td', { className: 'num' }, [
+                    this.formatNumber(result.cy.price, 'currency')
+                ]));
+
+                // Bridge components
+                const totalClass = 'num ' + (result.totalChange >= 0 ? 'positive' : 'negative');
+                tr.appendChild(this.createElement('td', { className: totalClass }, [
+                    this.formatNumber(result.totalChange, 'currency')
+                ]));
+
+                tr.appendChild(this.createElement('td', {
+                    className: 'num ' + (result.priceImpact >= 0 ? 'positive' : 'negative')
+                }, [this.formatNumber(result.priceImpact, 'currency')]));
+
+                tr.appendChild(this.createElement('td', {
+                    className: 'num ' + (result.volumeImpact >= 0 ? 'positive' : 'negative')
+                }, [this.formatNumber(result.volumeImpact, 'currency')]));
+
+                tr.appendChild(this.createElement('td', {
+                    className: 'num ' + (result.mixImpact >= 0 ? 'positive' : 'negative')
+                }, [this.formatNumber(result.mixImpact, 'currency')]));
+
+                if (mode === 'gm') {
+                    tr.appendChild(this.createElement('td', {
+                        className: 'num ' + (result.costImpact >= 0 ? 'positive' : 'negative')
+                    }, [this.formatNumber(result.costImpact, 'currency')]));
+                }
             }
-            
+
             tbody.appendChild(tr);
         }
-        
+
         // Render pagination
         this.renderPagination(results.length, page, pageSize);
     },

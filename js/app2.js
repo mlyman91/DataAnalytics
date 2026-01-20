@@ -317,10 +317,14 @@ Object.assign(App, {
 
     showResults() {
         this.showScreen('screen-results');
-        
+
         const { bridgeResults, aggregationResults, pyRange, cyRange, mode, gmPriceDefinition, selectedDimensions } = this.state;
         const summary = bridgeResults.summary;
-        
+
+        // Check if multi-year mode
+        const isMultiYear = aggregationResults.isMultiYear;
+        const fiscalYears = isMultiYear ? this.state.detectedFiscalYears.filter(y => y.fullyCovered) : [];
+
         // Period labels
         const pyLabel = PeriodUtils.formatDateRange(pyRange.start, pyRange.end);
         const cyLabel = PeriodUtils.formatDateRange(cyRange.start, cyRange.end);
@@ -332,7 +336,7 @@ Object.assign(App, {
         UIRenderer.renderBridgeSummary(summary, mode, aggregationResults.negatives);
 
         // Detail table
-        UIRenderer.renderDetailTableHeader(selectedDimensions, mode, this.state.pyLabel, this.state.cyLabel);
+        UIRenderer.renderDetailTableHeader(selectedDimensions, mode, this.state.pyLabel, this.state.cyLabel, isMultiYear, fiscalYears);
         this.renderDetailTable();
 
         // Negatives table
@@ -357,13 +361,17 @@ Object.assign(App, {
     },
 
     renderDetailTable() {
-        const { bridgeResults, selectedDimensions, mode, sortBy, searchTerm, currentPage } = this.state;
-        
+        const { bridgeResults, aggregationResults, selectedDimensions, mode, sortBy, searchTerm, currentPage } = this.state;
+
         let results = bridgeResults.detail;
         results = BridgeCalculator.filterResults(results, searchTerm);
         results = BridgeCalculator.sortResults(results, sortBy);
-        
-        UIRenderer.renderDetailTableBody(results, selectedDimensions, mode, currentPage, 50);
+
+        // Check if multi-year mode
+        const isMultiYear = aggregationResults.isMultiYear;
+        const fiscalYears = isMultiYear ? this.state.detectedFiscalYears.filter(y => y.fullyCovered) : [];
+
+        UIRenderer.renderDetailTableBody(results, selectedDimensions, mode, currentPage, 50, isMultiYear, fiscalYears);
     },
 
     switchTab(tabId) {
@@ -372,6 +380,9 @@ Object.assign(App, {
     },
 
     exportExcel() {
+        const { aggregationResults } = this.state;
+        const isMultiYear = aggregationResults.isMultiYear;
+
         const config = {
             mode: this.state.mode,
             gmPriceDefinition: this.state.gmPriceDefinition,
@@ -386,6 +397,11 @@ Object.assign(App, {
             quantityColumn: this.state.columnMappings.quantity,
             costColumn: this.state.columnMappings.cost
         };
+
+        // Add fiscal years if in multi-year mode
+        if (isMultiYear && this.state.detectedFiscalYears) {
+            config.fiscalYears = this.state.detectedFiscalYears.filter(y => y.fullyCovered);
+        }
 
         ExcelExport.exportToExcel(this.state.bridgeResults, this.state.aggregationResults, config);
     }
