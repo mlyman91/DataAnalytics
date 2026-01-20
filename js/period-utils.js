@@ -395,6 +395,65 @@ const PeriodUtils = {
             warnings: warnings,
             errors: errors
         };
+    },
+
+    /**
+     * Detect all complete fiscal years in a date range
+     *
+     * @param {Date} minDate - Earliest date in dataset
+     * @param {Date} maxDate - Latest date in dataset
+     * @param {number} fyEndMonth - Fiscal year end month (1-12)
+     * @returns {Object[]} - Array of fiscal year objects with metadata
+     */
+    detectFiscalYears: function(minDate, maxDate, fyEndMonth) {
+        if (!minDate || !maxDate || !fyEndMonth) {
+            return [];
+        }
+
+        const fiscalYears = [];
+
+        // Get first fiscal year that minDate falls into
+        const minYear = minDate.getFullYear();
+        const minMonth = minDate.getMonth() + 1; // 1-12
+        let startFY = minMonth > fyEndMonth ? minYear + 1 : minYear;
+
+        // Get last fiscal year that maxDate falls into
+        const maxYear = maxDate.getFullYear();
+        const maxMonth = maxDate.getMonth() + 1;
+        let endFY = maxMonth > fyEndMonth ? maxYear + 1 : maxYear;
+
+        // Generate fiscal year data for each year in range
+        for (let fy = startFY; fy <= endFY; fy++) {
+            const fyRange = this.getFiscalYearRange(fy, fyEndMonth);
+
+            // Check if this FY has complete data coverage
+            // Only include if the data range covers the entire FY
+            const fyFullyCovered = minDate <= fyRange.start && maxDate >= fyRange.end;
+
+            // Always include the year, but flag if not fully covered
+            fiscalYears.push({
+                fiscalYear: fy,
+                label: `FY ${fy}`,
+                start: fyRange.start,
+                end: fyRange.end,
+                fullyCovered: fyFullyCovered
+            });
+        }
+
+        return fiscalYears;
+    },
+
+    /**
+     * Check if data range has multiple complete fiscal years
+     *
+     * @param {Date} minDate - Earliest date
+     * @param {Date} maxDate - Latest date
+     * @param {number} fyEndMonth - Fiscal year end month
+     * @returns {boolean} - True if 2+ complete fiscal years detected
+     */
+    hasMultipleYears: function(minDate, maxDate, fyEndMonth) {
+        const years = this.detectFiscalYears(minDate, maxDate, fyEndMonth);
+        return years.filter(y => y.fullyCovered).length >= 2;
     }
 };
 
