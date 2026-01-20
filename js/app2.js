@@ -35,8 +35,27 @@ Object.assign(App, {
                 this.state.dataDateRange = { min: minDate, max: maxDate };
                 const info = document.getElementById('date-range-info');
                 if (minDate && maxDate) {
-                    info.innerHTML = `<p><strong>Date Range:</strong> ${PeriodUtils.formatDate(minDate)} to ${PeriodUtils.formatDate(maxDate)}</p>
+                    // Detect fiscal years in the data
+                    const fiscalYears = PeriodUtils.detectFiscalYears(minDate, maxDate, this.state.fyEndMonth);
+                    this.state.detectedFiscalYears = fiscalYears;
+
+                    // Check if multi-year mode should be enabled
+                    const fullYears = fiscalYears.filter(y => y.fullyCovered);
+                    this.state.hasMultipleYears = fullYears.length >= 2;
+
+                    let dateRangeHTML = `<p><strong>Date Range:</strong> ${PeriodUtils.formatDate(minDate)} to ${PeriodUtils.formatDate(maxDate)}</p>
                         <p><strong>Total Rows:</strong> ${rowCount.toLocaleString()}</p>`;
+
+                    // Show detected fiscal years
+                    if (fullYears.length >= 2) {
+                        const yearLabels = fullYears.map(y => y.label).join(', ');
+                        dateRangeHTML += `<p><strong>Detected Fiscal Years:</strong> ${yearLabels}</p>
+                        <p style="color: var(--color-success); font-weight: 600;">✓ Multi-year analysis available (${fullYears.length} complete years)</p>`;
+                    } else if (fullYears.length === 1) {
+                        dateRangeHTML += `<p><strong>Detected:</strong> ${fullYears[0].label} (partial data for other years)</p>`;
+                    }
+
+                    info.innerHTML = dateRangeHTML;
 
                     // Set default LTM end date
                     this.state.ltmEndDate = maxDate;
@@ -197,17 +216,31 @@ Object.assign(App, {
         try {
             // Stage 1: Parsing & Aggregating
             setStage('stage-parsing', 'active');
-            
-            const ctx = Aggregator.createContext({
+
+            // Determine if multi-year mode should be used
+            const useMultiYear = this.state.hasMultipleYears && this.state.detectedFiscalYears;
+            const fullYears = useMultiYear ? this.state.detectedFiscalYears.filter(y => y.fullyCovered) : [];
+
+            const aggregatorConfig = {
                 dimensions: this.state.selectedDimensions,
                 dateColumn: this.state.columnMappings.date,
                 salesColumn: this.state.columnMappings.sales,
                 quantityColumn: this.state.columnMappings.quantity,
                 costColumn: this.state.columnMappings.cost,
                 dateFormat: this.state.dateFormat,
-                pyRange: this.state.pyRange,
-                cyRange: this.state.cyRange
-            });
+                fyEndMonth: this.state.fyEndMonth
+            };
+
+            if (useMultiYear) {
+                // Multi-year mode: pass fiscal years
+                aggregatorConfig.fiscalYears = fullYears;
+            } else {
+                // Two-period mode: pass pyRange and cyRange
+                aggregatorConfig.pyRange = this.state.pyRange;
+                aggregatorConfig.cyRange = this.state.cyRange;
+            }
+
+            const ctx = Aggregator.createContext(aggregatorConfig);
 
             // Use appropriate parser based on file type
             const parser = this.state.isExcelFile ? ExcelParser : CSVParser;
@@ -244,10 +277,17 @@ Object.assign(App, {
             const aggregationResults = Aggregator.finalize(ctx);
             this.state.aggregationResults = aggregationResults;
 
-            const bridgeResults = BridgeCalculator.calculate(aggregationResults.data, {
+            const bridgeCalcOptions = {
                 mode: this.state.mode,
-                gmPriceDefinition: this.state.gmPriceDefinition
-            });
+                gmPriceDefinition: this.state.gmPriceDefinition,
+                isMultiYear: aggregationResults.isMultiYear
+            };
+
+            if (aggregationResults.isMultiYear) {
+                bridgeCalcOptions.fiscalYears = fullYears;
+            }
+
+            const bridgeResults = BridgeCalculator.calculate(aggregationResults.data, bridgeCalcOptions);
             this.state.bridgeResults = bridgeResults;
 
             setStage('stage-calculating', 'complete');
