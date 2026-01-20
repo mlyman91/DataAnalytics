@@ -174,7 +174,22 @@ const ExcelExport = {
         }
         
         const ws = XLSX.utils.aoa_to_sheet(data);
-        
+
+        // Apply number formatting to value columns
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cell_address = XLSX.utils.encode_cell({r: R, c: C});
+                if (!ws[cell_address]) continue;
+
+                // Format currency columns (columns 1-3+ are values)
+                if (C >= 1 && typeof ws[cell_address].v === 'number') {
+                    ws[cell_address].z = '$#,##0';
+                    ws[cell_address].t = 'n';
+                }
+            }
+        }
+
         // Set column widths
         ws['!cols'] = [
             { wch: 30 },
@@ -184,7 +199,7 @@ const ExcelExport = {
             { wch: 15 },
             { wch: 15 }
         ];
-        
+
         return ws;
     },
 
@@ -426,7 +441,30 @@ const ExcelExport = {
             }
         }
         ws['!cols'] = cols;
-        
+
+        // Apply number formatting to data cells
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {  // Start from row 1 (skip header)
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cell_address = XLSX.utils.encode_cell({r: R, c: C});
+                if (!ws[cell_address] || ws[cell_address].t !== 'n') continue;
+
+                const header = headerRow[C];
+                if (!header) continue;
+
+                // Volume columns: comma format without currency
+                if (header.includes('Vol') || header.includes('Volume')) {
+                    ws[cell_address].z = '#,##0';
+                }
+                // Sales, Price, Impact, Change columns: currency format
+                else if (header.includes('Sales') || header.includes('Price') ||
+                         header.includes('Impact') || header.includes('Change') ||
+                         header.includes('Δ')) {
+                    ws[cell_address].z = '$#,##0';
+                }
+            }
+        }
+
         return ws;
     },
 

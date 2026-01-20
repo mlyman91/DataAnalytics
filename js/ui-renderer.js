@@ -162,54 +162,66 @@ const UIRenderer = {
         let rows = [];
 
         if (summary.years) {
-            // Multi-year mode: show all YoY bridges
+            // Multi-year mode: show all YoY bridges with year totals
             const years = Object.keys(summary.years).sort((a, b) => Number(a) - Number(b));
             const firstYear = years[0];
             const lastYear = years[years.length - 1];
 
-            // Starting year
-            rows.push({
-                label: `FY ${firstYear}`,
-                value: summary.years[firstYear].value,
-                pct: null,
-                isTotal: false,
-                isStarting: true
-            });
+            // Add year-by-year breakdown
+            for (let i = 0; i < years.length; i++) {
+                const year = years[i];
+                const yearData = summary.years[year];
 
-            // Add all year-over-year bridges
-            for (let i = 0; i < years.length - 1; i++) {
-                const y1 = years[i];
-                const y2 = years[i + 1];
-                const bridgeKey = `${y1}-${y2}`;
-                const bridge = summary.bridges[bridgeKey];
+                // Starting year total
+                rows.push({
+                    label: `FY ${year}`,
+                    value: yearData.value,
+                    pct: null,
+                    isTotal: true,
+                    isStarting: i === 0
+                });
 
-                if (bridge) {
-                    rows.push({
-                        label: `${y1}→${y2} Price Impact`,
-                        value: bridge.priceImpact,
-                        pct: null,
-                        isTotal: false
-                    });
-                    rows.push({
-                        label: `${y1}→${y2} Volume Impact`,
-                        value: bridge.volumeImpact,
-                        pct: null,
-                        isTotal: false
-                    });
-                    rows.push({
-                        label: `${y1}→${y2} Mix Impact`,
-                        value: bridge.mixImpact,
-                        pct: null,
-                        isTotal: false
-                    });
+                // If not the last year, show bridge to next year
+                if (i < years.length - 1) {
+                    const nextYear = years[i + 1];
+                    const bridgeKey = `${year}-${nextYear}`;
+                    const bridge = summary.bridges[bridgeKey];
 
-                    if (mode === 'gm' && bridge.costImpact !== 0) {
+                    if (bridge) {
+                        // Calculate percentages based on starting year value
+                        const startValue = yearData.value;
+                        const pricePct = startValue !== 0 ? (bridge.priceImpact / Math.abs(startValue)) * 100 : 0;
+                        const volPct = startValue !== 0 ? (bridge.volumeImpact / Math.abs(startValue)) * 100 : 0;
+                        const mixPct = startValue !== 0 ? (bridge.mixImpact / Math.abs(startValue)) * 100 : 0;
+
                         rows.push({
-                            label: `${y1}→${y2} Cost Impact`,
-                            value: bridge.costImpact,
-                            pct: null,
+                            label: `${year}→${nextYear} Price Impact`,
+                            value: bridge.priceImpact,
+                            pct: pricePct,
                             isTotal: false
                         });
+                        rows.push({
+                            label: `${year}→${nextYear} Volume Impact`,
+                            value: bridge.volumeImpact,
+                            pct: volPct,
+                            isTotal: false
+                        });
+                        rows.push({
+                            label: `${year}→${nextYear} Mix Impact`,
+                            value: bridge.mixImpact,
+                            pct: mixPct,
+                            isTotal: false
+                        });
+
+                        if (mode === 'gm' && bridge.costImpact !== 0) {
+                            const costPct = startValue !== 0 ? (bridge.costImpact / Math.abs(startValue)) * 100 : 0;
+                            rows.push({
+                                label: `${year}→${nextYear} Cost Impact`,
+                                value: bridge.costImpact,
+                                pct: costPct,
+                                isTotal: false
+                            });
+                        }
                     }
                 }
             }
@@ -232,14 +244,6 @@ const UIRenderer = {
                     });
                 }
             }
-
-            // Ending year
-            rows.push({
-                label: `FY ${lastYear}`,
-                value: summary.years[lastYear].value,
-                pct: null,
-                isTotal: true
-            });
 
         } else {
             // Two-period mode: original behavior
