@@ -276,6 +276,56 @@ label {
     accent-color: var(--color-primary);
 }
 
+/* Fiscal Year Selection */
+.fiscal-year-selection {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+}
+
+.fiscal-year-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: white;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.fiscal-year-option:hover {
+    border-color: var(--color-secondary);
+    background: var(--color-bg);
+}
+
+.fiscal-year-option input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--color-primary);
+}
+
+.fiscal-year-option input[type="checkbox"]:checked + .fy-label {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.fy-label {
+    font-size: 0.95rem;
+    color: var(--color-text);
+}
+
+.fy-date-range {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
 /* Radio buttons */
 .radio-group {
     display: flex;

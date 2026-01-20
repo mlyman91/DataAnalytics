@@ -188,39 +188,54 @@
                         </div>
                     </div>
 
-                    <div class="config-section">
-                        <h3>Current Period Type</h3>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="use-ltm-period" checked>
-                            Use LTM (Last Twelve Months) for current period
-                        </label>
-                        <p class="period-help" style="margin-top: 8px; font-size: 0.9em; color: var(--color-muted);">
-                            When unchecked, the current period will use a full fiscal year instead of LTM.
+                    <!-- Multi-Year Selection (shown when multiple complete years detected) -->
+                    <div class="config-section" id="multi-year-section" style="display: none;">
+                        <h3>Select Fiscal Years for Analysis</h3>
+                        <p>Select which fiscal years to include in your multi-year analysis:</p>
+                        <div id="fiscal-year-checkboxes" class="fiscal-year-selection">
+                            <!-- Populated dynamically with fiscal year checkboxes -->
+                        </div>
+                        <p class="period-help" style="margin-top: 12px; font-size: 0.9em; color: var(--color-muted);">
+                            Select at least 2 years to enable multi-year analysis.
                         </p>
                     </div>
 
-                    <div class="config-section" id="ltm-config-section">
-                        <h3>LTM End Date</h3>
-                        <p>Confirm the end date for Last Twelve Months calculation:</p>
-                        <input type="date" id="ltm-end-date" class="date-input">
-                        <p class="ltm-help">
-                            LTM period will be: <span id="ltm-range-preview">--</span>
-                        </p>
-                    </div>
+                    <!-- Two-Period Configuration (shown when single year or user preference) -->
+                    <div id="two-period-config">
+                        <div class="config-section">
+                            <h3>Current Period Type</h3>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="use-ltm-period" checked>
+                                Use LTM (Last Twelve Months) for current period
+                            </label>
+                            <p class="period-help" style="margin-top: 8px; font-size: 0.9em; color: var(--color-muted);">
+                                When unchecked, the current period will use a full fiscal year instead of LTM.
+                            </p>
+                        </div>
 
-                    <div class="config-section" id="cy-fiscal-year-section" style="display: none;">
-                        <h3>Current Fiscal Year</h3>
-                        <p>Select the fiscal year for the current period:</p>
-                        <input type="number" id="cy-fiscal-year" class="date-input" min="2000" max="2100" style="width: 120px;">
-                        <p class="cy-help">
-                            Current FY period will be: <span id="cy-range-preview">--</span>
-                        </p>
-                    </div>
+                        <div class="config-section" id="ltm-config-section">
+                            <h3>LTM End Date</h3>
+                            <p>Confirm the end date for Last Twelve Months calculation:</p>
+                            <input type="date" id="ltm-end-date" class="date-input">
+                            <p class="ltm-help">
+                                LTM period will be: <span id="ltm-range-preview">--</span>
+                            </p>
+                        </div>
 
-                    <div class="config-section">
-                        <h3>Prior Fiscal Year</h3>
-                        <div id="pfy-info" class="pfy-info">
-                            <p>Prior Fiscal Year: <span id="pfy-range">--</span></p>
+                        <div class="config-section" id="cy-fiscal-year-section" style="display: none;">
+                            <h3>Current Fiscal Year</h3>
+                            <p>Select the fiscal year for the current period:</p>
+                            <input type="number" id="cy-fiscal-year" class="date-input" min="2000" max="2100" style="width: 120px;">
+                            <p class="cy-help">
+                                Current FY period will be: <span id="cy-range-preview">--</span>
+                            </p>
+                        </div>
+
+                        <div class="config-section">
+                            <h3>Prior Fiscal Year</h3>
+                            <div id="pfy-info" class="pfy-info">
+                                <p>Prior Fiscal Year: <span id="pfy-range">--</span></p>
+                            </div>
                         </div>
                     </div>
 

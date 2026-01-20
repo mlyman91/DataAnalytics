@@ -51,8 +51,19 @@ Object.assign(App, {
                         const yearLabels = fullYears.map(y => y.label).join(', ');
                         dateRangeHTML += `<p><strong>Detected Fiscal Years:</strong> ${yearLabels}</p>
                         <p style="color: var(--color-success); font-weight: 600;">✓ Multi-year analysis available (${fullYears.length} complete years)</p>`;
+
+                        // Show multi-year section and hide two-period config
+                        this.showMultiYearSelection(fullYears);
                     } else if (fullYears.length === 1) {
                         dateRangeHTML += `<p><strong>Detected:</strong> ${fullYears[0].label} (partial data for other years)</p>`;
+
+                        // Show two-period config and hide multi-year section
+                        document.getElementById('multi-year-section').style.display = 'none';
+                        document.getElementById('two-period-config').style.display = 'block';
+                    } else {
+                        // No complete years, show two-period config
+                        document.getElementById('multi-year-section').style.display = 'none';
+                        document.getElementById('two-period-config').style.display = 'block';
                     }
 
                     info.innerHTML = dateRangeHTML;
@@ -81,8 +92,99 @@ Object.assign(App, {
         });
     },
 
+    showMultiYearSelection(fiscalYears) {
+        // Show multi-year section, hide two-period config
+        document.getElementById('multi-year-section').style.display = 'block';
+        document.getElementById('two-period-config').style.display = 'none';
+
+        // Populate fiscal year checkboxes
+        const container = document.getElementById('fiscal-year-checkboxes');
+        UIRenderer.clearElement(container);
+
+        // Initialize selected years if not already set (default to all years)
+        if (!this.state.selectedFiscalYears || this.state.selectedFiscalYears.length === 0) {
+            this.state.selectedFiscalYears = fiscalYears.map(fy => fy.fiscalYear);
+        }
+
+        for (const fyConfig of fiscalYears) {
+            const isChecked = this.state.selectedFiscalYears.includes(fyConfig.fiscalYear);
+
+            const label = UIRenderer.createElement('label', { className: 'fiscal-year-option' });
+
+            const checkbox = UIRenderer.createElement('input', {
+                type: 'checkbox',
+                value: fyConfig.fiscalYear,
+                checked: isChecked ? 'checked' : null,
+                'data-fy-start': PeriodUtils.toISODateString(fyConfig.start),
+                'data-fy-end': PeriodUtils.toISODateString(fyConfig.end)
+            });
+
+            checkbox.addEventListener('change', () => this.updateFiscalYearSelection());
+
+            const textContainer = UIRenderer.createElement('div');
+            const fyLabel = UIRenderer.createElement('div', { className: 'fy-label' }, [fyConfig.label]);
+            const dateRange = UIRenderer.createElement('div', { className: 'fy-date-range' }, [
+                `${PeriodUtils.formatDate(fyConfig.start)} - ${PeriodUtils.formatDate(fyConfig.end)}`
+            ]);
+
+            textContainer.appendChild(fyLabel);
+            textContainer.appendChild(dateRange);
+            label.appendChild(checkbox);
+            label.appendChild(textContainer);
+            container.appendChild(label);
+        }
+
+        this.updateFiscalYearSelection();
+    },
+
+    updateFiscalYearSelection() {
+        const checkboxes = document.querySelectorAll('#fiscal-year-checkboxes input[type="checkbox"]');
+        this.state.selectedFiscalYears = [];
+
+        checkboxes.forEach(cb => {
+            if (cb.checked) {
+                this.state.selectedFiscalYears.push(Number(cb.value));
+            }
+        });
+
+        // Sort selected years
+        this.state.selectedFiscalYears.sort((a, b) => a - b);
+
+        // Update summary and validation
+        const summary = document.getElementById('period-summary');
+        const btnContinue = document.getElementById('btn-to-lod');
+
+        if (this.state.selectedFiscalYears.length < 2) {
+            summary.innerHTML = '<p style="color: var(--color-warning);">⚠️ Please select at least 2 fiscal years for multi-year analysis.</p>';
+            btnContinue.disabled = true;
+        } else {
+            const selectedYearObjs = this.state.detectedFiscalYears.filter(fy =>
+                this.state.selectedFiscalYears.includes(fy.fiscalYear)
+            );
+
+            const yearLabels = selectedYearObjs.map(fy => fy.label).join(', ');
+            const firstYear = selectedYearObjs[0];
+            const lastYear = selectedYearObjs[selectedYearObjs.length - 1];
+
+            summary.innerHTML = `<p><strong>Multi-Year Analysis:</strong></p>
+                <p>Selected Years: ${yearLabels}</p>
+                <p>Period: ${PeriodUtils.formatDate(firstYear.start)} to ${PeriodUtils.formatDate(lastYear.end)}</p>
+                <p style="color: var(--color-success);">✓ ${this.state.selectedFiscalYears.length} fiscal years selected</p>`;
+
+            btnContinue.disabled = false;
+
+            // Update state to use multi-year mode
+            this.state.useMultiYearMode = true;
+        }
+    },
+
     updatePeriodPreviews() {
         const { fyEndMonth, ltmEndDate, useLTM, cyFiscalYear } = this.state;
+
+        // Skip if we're in multi-year mode
+        if (this.state.useMultiYearMode) {
+            return;
+        }
 
         let cyRange, pyRange, currentFY, priorFY;
 
@@ -218,8 +320,15 @@ Object.assign(App, {
             setStage('stage-parsing', 'active');
 
             // Determine if multi-year mode should be used
-            const useMultiYear = this.state.hasMultipleYears && this.state.detectedFiscalYears;
-            const fullYears = useMultiYear ? this.state.detectedFiscalYears.filter(y => y.fullyCovered) : [];
+            const useMultiYear = this.state.useMultiYearMode && this.state.selectedFiscalYears && this.state.selectedFiscalYears.length >= 2;
+            let selectedFiscalYearConfigs = [];
+
+            if (useMultiYear) {
+                // Get the fiscal year configs for selected years only
+                selectedFiscalYearConfigs = this.state.detectedFiscalYears.filter(fy =>
+                    this.state.selectedFiscalYears.includes(fy.fiscalYear)
+                );
+            }
 
             const aggregatorConfig = {
                 dimensions: this.state.selectedDimensions,
@@ -232,8 +341,8 @@ Object.assign(App, {
             };
 
             if (useMultiYear) {
-                // Multi-year mode: pass fiscal years
-                aggregatorConfig.fiscalYears = fullYears;
+                // Multi-year mode: pass selected fiscal years
+                aggregatorConfig.fiscalYears = selectedFiscalYearConfigs;
             } else {
                 // Two-period mode: pass pyRange and cyRange
                 aggregatorConfig.pyRange = this.state.pyRange;
@@ -284,7 +393,7 @@ Object.assign(App, {
             };
 
             if (aggregationResults.isMultiYear) {
-                bridgeCalcOptions.fiscalYears = fullYears;
+                bridgeCalcOptions.fiscalYears = selectedFiscalYearConfigs;
             }
 
             const bridgeResults = BridgeCalculator.calculate(aggregationResults.data, bridgeCalcOptions);
@@ -323,7 +432,9 @@ Object.assign(App, {
 
         // Check if multi-year mode
         const isMultiYear = aggregationResults.isMultiYear;
-        const fiscalYears = isMultiYear ? this.state.detectedFiscalYears.filter(y => y.fullyCovered) : [];
+        const fiscalYears = isMultiYear && this.state.selectedFiscalYears ?
+            this.state.detectedFiscalYears.filter(fy => this.state.selectedFiscalYears.includes(fy.fiscalYear)) :
+            [];
 
         // Period labels
         const pyLabel = PeriodUtils.formatDateRange(pyRange.start, pyRange.end);

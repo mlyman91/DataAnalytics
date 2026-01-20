@@ -34,7 +34,12 @@ const App = {
         shouldCancel: false,
         currentPage: 1,
         sortBy: 'total-desc',
-        searchTerm: ''
+        searchTerm: '',
+        // Multi-year support
+        detectedFiscalYears: [],
+        selectedFiscalYears: [],
+        hasMultipleYears: false,
+        useMultiYearMode: false
     },
 
     init: function() {
