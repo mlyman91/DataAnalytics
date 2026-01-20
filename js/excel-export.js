@@ -57,70 +57,121 @@ const ExcelExport = {
      */
     _createSummarySheet: function(summary, config, negatives) {
         const data = [];
-        
+
         // Header section
         data.push([config.mode === 'gm' ? 'Gross Margin Bridge Summary' : 'Sales PVM Bridge Summary']);
         data.push([`Generated: ${new Date().toLocaleString()}`]);
         data.push([]);
-        
-        // Period summary
-        const pyLabel = config.pyLabel || 'Prior Year';
-        const cyLabel = config.cyLabel || 'Current Year';
 
-        data.push(['Period Summary']);
-        data.push(['Period', 'Start Date', 'End Date', 'Value', 'Quantity', 'Transactions']);
-        data.push([
-            pyLabel,
-            PeriodUtils.formatDate(config.pyRange.start),
-            PeriodUtils.formatDate(config.pyRange.end),
-            summary.py.value,
-            summary.py.quantity,
-            summary.py.count
-        ]);
-        data.push([
-            cyLabel,
-            PeriodUtils.formatDate(config.cyRange.start),
-            PeriodUtils.formatDate(config.cyRange.end),
-            summary.cy.value,
-            summary.cy.quantity,
-            summary.cy.count
-        ]);
-        data.push([]);
-        
-        // Bridge components
-        data.push(['Bridge Analysis']);
-        data.push(['Component', 'Impact ($)', '% of Total Change']);
-        data.push([`${pyLabel} Starting Value`, summary.py.value, '']);
-        data.push(['Price Impact', summary.priceImpact, summary.priceImpactPct / 100]);
-        data.push(['Volume Impact', summary.volumeImpact, summary.volumeImpactPct / 100]);
-        data.push(['Mix Impact', summary.mixImpact, summary.mixImpactPct / 100]);
+        if (summary.years) {
+            // Multi-year mode
+            const years = Object.keys(summary.years).sort((a, b) => Number(a) - Number(b));
 
-        if (config.mode === 'gm' && summary.costImpact !== 0) {
-            data.push(['Cost Impact', summary.costImpact, summary.costImpactPct / 100]);
-        }
-
-        // Negative values row (only for two-period mode)
-        if (negatives.py && negatives.cy) {
-            const negTotal = negatives.cy.sales - negatives.py.sales;
-            if (negTotal !== 0) {
-                data.push(['Negative Values (excluded from above)', negTotal, '']);
+            // Period summary
+            data.push(['Period Summary']);
+            data.push(['Fiscal Year', 'Value', 'Quantity', 'Transactions']);
+            for (const year of years) {
+                const yearData = summary.years[year];
+                data.push([
+                    `FY ${year}`,
+                    yearData.value,
+                    yearData.quantity,
+                    yearData.count
+                ]);
             }
-        }
+            data.push([]);
 
-        data.push([`${cyLabel} Ending Value`, summary.cy.value, '']);
-        data.push([]);
-        
-        // Total change summary
-        data.push(['Total Change', summary.totalChange, summary.changePct / 100]);
-        data.push([]);
-        
-        // LOD counts
-        data.push(['LOD Analysis Summary']);
-        data.push(['Category', 'Count']);
-        data.push(['Total LOD Combinations', summary.counts.total]);
-        data.push(['New Items (in CY only)', summary.counts.new]);
-        data.push(['Discontinued Items (in PY only)', summary.counts.discontinued]);
-        data.push(['Continuing Items', summary.counts.continuing]);
+            // Year-over-year bridge analysis
+            data.push(['Year-over-Year Bridge Analysis']);
+            data.push(['Component', 'Impact ($)']);
+
+            data.push([`FY ${years[0]} Starting Value`, summary.years[years[0]].value]);
+
+            for (let i = 0; i < years.length - 1; i++) {
+                const y1 = years[i];
+                const y2 = years[i + 1];
+                const bridgeKey = `${y1}-${y2}`;
+                const bridge = summary.bridges[bridgeKey];
+
+                if (bridge) {
+                    data.push([`${y1}→${y2} Price Impact`, bridge.priceImpact]);
+                    data.push([`${y1}→${y2} Volume Impact`, bridge.volumeImpact]);
+                    data.push([`${y1}→${y2} Mix Impact`, bridge.mixImpact]);
+
+                    if (config.mode === 'gm' && bridge.costImpact !== 0) {
+                        data.push([`${y1}→${y2} Cost Impact`, bridge.costImpact]);
+                    }
+                }
+            }
+
+            data.push([`FY ${years[years.length - 1]} Ending Value`, summary.years[years[years.length - 1]].value]);
+            data.push([]);
+
+            // LOD counts
+            data.push(['LOD Analysis Summary']);
+            data.push(['Category', 'Count']);
+            data.push(['Total LOD Combinations', summary.counts.total]);
+
+        } else {
+            // Two-period mode: original behavior
+            const pyLabel = config.pyLabel || 'Prior Year';
+            const cyLabel = config.cyLabel || 'Current Year';
+
+            data.push(['Period Summary']);
+            data.push(['Period', 'Start Date', 'End Date', 'Value', 'Quantity', 'Transactions']);
+            data.push([
+                pyLabel,
+                PeriodUtils.formatDate(config.pyRange.start),
+                PeriodUtils.formatDate(config.pyRange.end),
+                summary.py.value,
+                summary.py.quantity,
+                summary.py.count
+            ]);
+            data.push([
+                cyLabel,
+                PeriodUtils.formatDate(config.cyRange.start),
+                PeriodUtils.formatDate(config.cyRange.end),
+                summary.cy.value,
+                summary.cy.quantity,
+                summary.cy.count
+            ]);
+            data.push([]);
+
+            // Bridge components
+            data.push(['Bridge Analysis']);
+            data.push(['Component', 'Impact ($)', '% of Total Change']);
+            data.push([`${pyLabel} Starting Value`, summary.py.value, '']);
+            data.push(['Price Impact', summary.priceImpact, summary.priceImpactPct / 100]);
+            data.push(['Volume Impact', summary.volumeImpact, summary.volumeImpactPct / 100]);
+            data.push(['Mix Impact', summary.mixImpact, summary.mixImpactPct / 100]);
+
+            if (config.mode === 'gm' && summary.costImpact !== 0) {
+                data.push(['Cost Impact', summary.costImpact, summary.costImpactPct / 100]);
+            }
+
+            // Negative values row (only for two-period mode)
+            if (negatives.py && negatives.cy) {
+                const negTotal = negatives.cy.sales - negatives.py.sales;
+                if (negTotal !== 0) {
+                    data.push(['Negative Values (excluded from above)', negTotal, '']);
+                }
+            }
+
+            data.push([`${cyLabel} Ending Value`, summary.cy.value, '']);
+            data.push([]);
+
+            // Total change summary
+            data.push(['Total Change', summary.totalChange, summary.changePct / 100]);
+            data.push([]);
+
+            // LOD counts
+            data.push(['LOD Analysis Summary']);
+            data.push(['Category', 'Count']);
+            data.push(['Total LOD Combinations', summary.counts.total]);
+            data.push(['New Items (in CY only)', summary.counts.new]);
+            data.push(['Discontinued Items (in PY only)', summary.counts.discontinued]);
+            data.push(['Continuing Items', summary.counts.continuing]);
+        }
         
         const ws = XLSX.utils.aoa_to_sheet(data);
         

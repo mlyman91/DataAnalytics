@@ -114,17 +114,42 @@ const UIRenderer = {
         const pyPeriodEl = document.getElementById('summary-py-period');
         const cyPeriodEl = document.getElementById('summary-cy-period');
         const changePctEl = document.getElementById('summary-change-pct');
-        
-        pyValueEl.textContent = this.formatNumber(summary.py.value, 'currency');
-        cyValueEl.textContent = this.formatNumber(summary.cy.value, 'currency');
-        changeValueEl.textContent = this.formatNumber(summary.totalChange, 'currency');
-        
-        pyPeriodEl.textContent = pyPeriodLabel;
-        cyPeriodEl.textContent = cyPeriodLabel;
-        
-        const changePct = this.formatNumber(summary.changePct, 'percent');
-        changePctEl.textContent = summary.changePct >= 0 ? '+' + changePct : changePct;
-        changePctEl.className = 'card-pct ' + (summary.changePct >= 0 ? 'positive' : 'negative');
+
+        // Multi-year mode vs two-period mode
+        if (summary.years) {
+            // Multi-year: show first and last year
+            const years = Object.keys(summary.years).sort((a, b) => Number(a) - Number(b));
+            const firstYear = years[0];
+            const lastYear = years[years.length - 1];
+
+            pyValueEl.textContent = this.formatNumber(summary.years[firstYear].value, 'currency');
+            cyValueEl.textContent = this.formatNumber(summary.years[lastYear].value, 'currency');
+
+            // Calculate total change from first to last year
+            const totalChange = summary.years[lastYear].value - summary.years[firstYear].value;
+            changeValueEl.textContent = this.formatNumber(totalChange, 'currency');
+
+            pyPeriodEl.textContent = `FY ${firstYear}`;
+            cyPeriodEl.textContent = `FY ${lastYear}`;
+
+            const changePct = summary.years[firstYear].value !== 0 ?
+                (totalChange / Math.abs(summary.years[firstYear].value)) * 100 : 0;
+            const changePctFormatted = this.formatNumber(changePct, 'percent');
+            changePctEl.textContent = changePct >= 0 ? '+' + changePctFormatted : changePctFormatted;
+            changePctEl.className = 'card-pct ' + (changePct >= 0 ? 'positive' : 'negative');
+        } else {
+            // Two-period mode: original behavior
+            pyValueEl.textContent = this.formatNumber(summary.py.value, 'currency');
+            cyValueEl.textContent = this.formatNumber(summary.cy.value, 'currency');
+            changeValueEl.textContent = this.formatNumber(summary.totalChange, 'currency');
+
+            pyPeriodEl.textContent = pyPeriodLabel;
+            cyPeriodEl.textContent = cyPeriodLabel;
+
+            const changePct = this.formatNumber(summary.changePct, 'percent');
+            changePctEl.textContent = summary.changePct >= 0 ? '+' + changePct : changePct;
+            changePctEl.className = 'card-pct ' + (summary.changePct >= 0 ? 'positive' : 'negative');
+        }
     },
 
     /**
@@ -133,64 +158,151 @@ const UIRenderer = {
     renderBridgeSummary: function(summary, mode, negatives) {
         const tbody = document.getElementById('bridge-summary-body');
         this.clearElement(tbody);
-        
-        const rows = [
-            {
-                label: 'Prior Year',
-                value: summary.py.value,
+
+        let rows = [];
+
+        if (summary.years) {
+            // Multi-year mode: show all YoY bridges
+            const years = Object.keys(summary.years).sort((a, b) => Number(a) - Number(b));
+            const firstYear = years[0];
+            const lastYear = years[years.length - 1];
+
+            // Starting year
+            rows.push({
+                label: `FY ${firstYear}`,
+                value: summary.years[firstYear].value,
                 pct: null,
                 isTotal: false,
                 isStarting: true
-            },
-            {
-                label: 'Price Impact',
-                value: summary.priceImpact,
-                pct: summary.priceImpactPct,
-                isTotal: false
-            },
-            {
-                label: 'Volume Impact',
-                value: summary.volumeImpact,
-                pct: summary.volumeImpactPct,
-                isTotal: false
-            },
-            {
-                label: 'Mix Impact',
-                value: summary.mixImpact,
-                pct: summary.mixImpactPct,
-                isTotal: false
+            });
+
+            // Add all year-over-year bridges
+            for (let i = 0; i < years.length - 1; i++) {
+                const y1 = years[i];
+                const y2 = years[i + 1];
+                const bridgeKey = `${y1}-${y2}`;
+                const bridge = summary.bridges[bridgeKey];
+
+                if (bridge) {
+                    rows.push({
+                        label: `${y1}→${y2} Price Impact`,
+                        value: bridge.priceImpact,
+                        pct: null,
+                        isTotal: false
+                    });
+                    rows.push({
+                        label: `${y1}→${y2} Volume Impact`,
+                        value: bridge.volumeImpact,
+                        pct: null,
+                        isTotal: false
+                    });
+                    rows.push({
+                        label: `${y1}→${y2} Mix Impact`,
+                        value: bridge.mixImpact,
+                        pct: null,
+                        isTotal: false
+                    });
+
+                    if (mode === 'gm' && bridge.costImpact !== 0) {
+                        rows.push({
+                            label: `${y1}→${y2} Cost Impact`,
+                            value: bridge.costImpact,
+                            pct: null,
+                            isTotal: false
+                        });
+                    }
+                }
             }
-        ];
-        
-        // Add cost impact for GM mode with sales-per-unit
-        if (mode === 'gm' && summary.costImpact !== 0) {
+
+            // Add negative values if present (multi-year)
+            if (negatives && typeof negatives === 'object' && !negatives.py && !negatives.cy) {
+                let negTotal = 0;
+                for (const year of years) {
+                    if (negatives[year]) {
+                        negTotal += negatives[year].sales;
+                    }
+                }
+                if (negTotal !== 0) {
+                    rows.push({
+                        label: 'Negative Values (excluded)',
+                        value: negTotal,
+                        pct: null,
+                        isTotal: false,
+                        isNegatives: true
+                    });
+                }
+            }
+
+            // Ending year
             rows.push({
-                label: 'Cost Impact',
-                value: summary.costImpact,
-                pct: summary.costImpactPct,
-                isTotal: false
-            });
-        }
-        
-        // Add negative values if present
-        const negTotal = (negatives.cy.sales - negatives.py.sales);
-        if (negTotal !== 0) {
-            rows.push({
-                label: 'Negative Values (excluded)',
-                value: negTotal,
+                label: `FY ${lastYear}`,
+                value: summary.years[lastYear].value,
                 pct: null,
-                isTotal: false,
-                isNegatives: true
+                isTotal: true
+            });
+
+        } else {
+            // Two-period mode: original behavior
+            rows = [
+                {
+                    label: 'Prior Year',
+                    value: summary.py.value,
+                    pct: null,
+                    isTotal: false,
+                    isStarting: true
+                },
+                {
+                    label: 'Price Impact',
+                    value: summary.priceImpact,
+                    pct: summary.priceImpactPct,
+                    isTotal: false
+                },
+                {
+                    label: 'Volume Impact',
+                    value: summary.volumeImpact,
+                    pct: summary.volumeImpactPct,
+                    isTotal: false
+                },
+                {
+                    label: 'Mix Impact',
+                    value: summary.mixImpact,
+                    pct: summary.mixImpactPct,
+                    isTotal: false
+                }
+            ];
+
+            // Add cost impact for GM mode with sales-per-unit
+            if (mode === 'gm' && summary.costImpact !== 0) {
+                rows.push({
+                    label: 'Cost Impact',
+                    value: summary.costImpact,
+                    pct: summary.costImpactPct,
+                    isTotal: false
+                });
+            }
+
+            // Add negative values if present
+            if (negatives.py && negatives.cy) {
+                const negTotal = (negatives.cy.sales - negatives.py.sales);
+                if (negTotal !== 0) {
+                    rows.push({
+                        label: 'Negative Values (excluded)',
+                        value: negTotal,
+                        pct: null,
+                        isTotal: false,
+                        isNegatives: true
+                    });
+                }
+            }
+
+            // Add total row
+            rows.push({
+                label: 'Current Year / LTM',
+                value: summary.cy.value,
+                pct: null,
+                isTotal: true
             });
         }
-        
-        // Add total row
-        rows.push({
-            label: 'Current Year / LTM',
-            value: summary.cy.value,
-            pct: null,
-            isTotal: true
-        });
         
         for (const row of rows) {
             const tr = this.createElement('tr', {
