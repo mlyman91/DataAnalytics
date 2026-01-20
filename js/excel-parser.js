@@ -10,16 +10,28 @@
 
 const ExcelParser = {
     /**
+     * Convert row array to object keyed by headers
+     * @private
+     */
+    _rowToObject: function(row, headers) {
+        const obj = {};
+        for (let i = 0; i < headers.length; i++) {
+            obj[headers[i]] = row[i] !== undefined ? String(row[i]) : '';
+        }
+        return obj;
+    },
+
+    /**
      * Scan Excel file and extract headers + sample rows
      * @param {File} file - Excel file
      * @param {number} sampleSize - Number of rows to sample
-     * @returns {Promise<{headers: string[], sampleRows: string[][]}>}
+     * @returns {Promise<{headers: string[], sampleRows: Object[]}>}
      */
     scanFile: async function(file, sampleSize = 100) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
 
-            reader.onload = function(e) {
+            reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
@@ -39,10 +51,11 @@ const ExcelParser = {
                     // First row is headers
                     const headers = jsonData[0].map(h => String(h).trim());
 
-                    // Rest are data rows (up to sampleSize)
-                    const sampleRows = jsonData.slice(1, sampleSize + 1).map(row =>
-                        row.map(cell => String(cell))
-                    );
+                    // Rest are data rows (up to sampleSize) - convert to objects
+                    const sampleRows = jsonData.slice(1, sampleSize + 1).map(row => {
+                        const rowArray = row.map(cell => String(cell));
+                        return this._rowToObject(rowArray, headers);
+                    });
 
                     resolve({ headers, sampleRows });
                 } catch (error) {
@@ -75,7 +88,7 @@ const ExcelParser = {
         try {
             const reader = new FileReader();
 
-            reader.onload = function(e) {
+            reader.onload = (e) => {
                 try {
                     if (shouldCancel()) {
                         onComplete && onComplete({ cancelled: true, rowCount: 0 });
@@ -109,8 +122,9 @@ const ExcelParser = {
                             return;
                         }
 
-                        const row = jsonData[i].map(cell => String(cell));
-                        onRow && onRow(row, i);
+                        const rowArray = jsonData[i].map(cell => String(cell));
+                        const rowObj = this._rowToObject(rowArray, headers);
+                        onRow && onRow(rowObj, i);
                         rowCount++;
 
                         // Simulate progress (Excel is loaded all at once, but we can still report progress)
@@ -143,15 +157,16 @@ const ExcelParser = {
     /**
      * Extract date samples from Excel data
      */
-    extractDateSamples: function(sampleRows, columnIndex) {
-        const samples = [];
+    extractDateSamples: function(sampleRows, dateColumn) {
+        const samples = new Set();
         for (const row of sampleRows) {
-            if (row[columnIndex]) {
-                samples.push(row[columnIndex]);
-                if (samples.length >= 10) break;
+            const value = row[dateColumn];
+            if (value && value.trim && value.trim()) {
+                samples.add(value.trim());
+                if (samples.size >= 10) break;
             }
         }
-        return samples;
+        return Array.from(samples);
     },
 
     /**

@@ -290,22 +290,24 @@ const App = {
     },
 
     detectAndShowDateFormat: function(dateColumn) {
-        const samples = CSVParser.extractDateSamples(this.state.sampleRows, dateColumn);
+        // Use appropriate parser based on file type
+        const parser = this.state.isExcelFile ? ExcelParser : CSVParser;
+        const samples = parser.extractDateSamples(this.state.sampleRows, dateColumn);
         if (samples.length === 0) {
             document.getElementById('date-format-section').classList.add('hidden');
             return;
         }
-        
+
         const detected = PeriodUtils.detectDateFormat(samples);
         this.state.detectedDateFormat = detected;
         this.state.dateFormat = detected.formatId;
-        
+
         const sampleList = document.getElementById('date-samples');
         UIRenderer.clearElement(sampleList);
         for (const sample of samples.slice(0, 5)) {
             sampleList.appendChild(UIRenderer.createElement('li', {}, [sample]));
         }
-        
+
         document.getElementById('date-format-select').value = detected.formatId || 'auto';
         this.updateDateParsePreview();
         document.getElementById('date-format-section').classList.remove('hidden');
@@ -313,7 +315,9 @@ const App = {
 
     updateDateParsePreview: function() {
         const preview = document.getElementById('date-parse-preview');
-        const samples = CSVParser.extractDateSamples(this.state.sampleRows, this.state.columnMappings.date);
+        // Use appropriate parser based on file type
+        const parser = this.state.isExcelFile ? ExcelParser : CSVParser;
+        const samples = parser.extractDateSamples(this.state.sampleRows, this.state.columnMappings.date);
         
         if (samples.length === 0 || !this.state.dateFormat) { preview.textContent = ''; return; }
         
