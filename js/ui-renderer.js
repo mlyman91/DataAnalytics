@@ -460,33 +460,51 @@ const UIRenderer = {
     renderNegativesTable: function(negatives) {
         const tbody = document.getElementById('negatives-table-body');
         this.clearElement(tbody);
-        
+
         const summary = document.getElementById('negatives-summary');
         this.clearElement(summary);
-        
+
+        // Check if multi-year mode or two-period mode
+        const isMultiYear = !negatives.py && !negatives.cy;
+
+        let totalNegCount = 0;
+        let totalNegSales = 0;
+        let rows = [];
+
+        if (isMultiYear) {
+            // Multi-year mode: negatives are keyed by year
+            for (const [year, neg] of Object.entries(negatives)) {
+                totalNegCount += neg.count;
+                totalNegSales += neg.sales;
+                if (neg.count > 0) {
+                    rows.push({ period: `FY ${year}`, type: 'Negative/Zero Sales or Qty', ...neg });
+                }
+            }
+        } else {
+            // Two-period mode: negatives.py and negatives.cy
+            totalNegCount = negatives.py.count + negatives.cy.count;
+            totalNegSales = negatives.py.sales + negatives.cy.sales;
+            rows = [
+                { period: 'Prior Year', type: 'Negative/Zero Sales or Qty', ...negatives.py },
+                { period: 'Current Year / LTM', type: 'Negative/Zero Sales or Qty', ...negatives.cy }
+            ];
+        }
+
         // Summary cards
-        const totalNegCount = negatives.py.count + negatives.cy.count;
-        const totalNegSales = negatives.py.sales + negatives.cy.sales;
-        
         summary.appendChild(this.createElement('div', { className: 'summary-card' }, [
             this.createElement('span', { className: 'card-label' }, ['Total Excluded Rows']),
             this.createElement('span', { className: 'card-value' }, [totalNegCount.toLocaleString()])
         ]));
-        
+
         summary.appendChild(this.createElement('div', { className: 'summary-card' }, [
             this.createElement('span', { className: 'card-label' }, ['Total Excluded Sales']),
             this.createElement('span', { className: 'card-value' }, [this.formatNumber(totalNegSales, 'currency')])
         ]));
-        
+
         // Table rows
-        const rows = [
-            { period: 'Prior Year', type: 'Negative/Zero Sales or Qty', ...negatives.py },
-            { period: 'Current Year / LTM', type: 'Negative/Zero Sales or Qty', ...negatives.cy }
-        ];
-        
         for (const row of rows) {
             if (row.count === 0) continue;
-            
+
             const tr = this.createElement('tr');
             tr.appendChild(this.createElement('td', {}, [row.period]));
             tr.appendChild(this.createElement('td', {}, [row.type]));
@@ -495,7 +513,7 @@ const UIRenderer = {
             tr.appendChild(this.createElement('td', { className: 'num' }, [this.formatNumber(row.quantity, 'quantity')]));
             tbody.appendChild(tr);
         }
-        
+
         if (tbody.children.length === 0) {
             const tr = this.createElement('tr');
             tr.appendChild(this.createElement('td', { colspan: '5', className: 'text-muted' }, [

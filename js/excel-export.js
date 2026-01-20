@@ -99,10 +99,12 @@ const ExcelExport = {
             data.push(['Cost Impact', summary.costImpact, summary.costImpactPct / 100]);
         }
 
-        // Negative values row
-        const negTotal = negatives.cy.sales - negatives.py.sales;
-        if (negTotal !== 0) {
-            data.push(['Negative Values (excluded from above)', negTotal, '']);
+        // Negative values row (only for two-period mode)
+        if (negatives.py && negatives.cy) {
+            const negTotal = negatives.cy.sales - negatives.py.sales;
+            if (negTotal !== 0) {
+                data.push(['Negative Values (excluded from above)', negTotal, '']);
+            }
         }
 
         data.push([`${cyLabel} Ending Value`, summary.cy.value, '']);
@@ -383,58 +385,99 @@ const ExcelExport = {
      */
     _createNegativesSheet: function(negatives, stats) {
         const data = [];
-        
+
         data.push(['Negative Values Analysis']);
         data.push(['Rows with Sales ≤ 0 or Quantity ≤ 0 are excluded from PVM calculations.']);
         data.push([]);
-        
-        // Summary
-        data.push(['Summary']);
-        data.push(['Metric', 'Prior Year', 'Current Year / LTM', 'Total']);
-        data.push([
-            'Excluded Row Count',
-            negatives.py.count,
-            negatives.cy.count,
-            negatives.py.count + negatives.cy.count
-        ]);
-        data.push([
-            'Excluded Sales Total',
-            negatives.py.sales,
-            negatives.cy.sales,
-            negatives.py.sales + negatives.cy.sales
-        ]);
-        data.push([
-            'Excluded Quantity Total',
-            negatives.py.quantity,
-            negatives.cy.quantity,
-            negatives.py.quantity + negatives.cy.quantity
-        ]);
-        data.push([
-            'Excluded Cost Total',
-            negatives.py.cost,
-            negatives.cy.cost,
-            negatives.py.cost + negatives.cy.cost
-        ]);
-        data.push([]);
-        
-        // Processing stats
-        data.push(['Processing Statistics']);
-        data.push(['Metric', 'Value']);
-        data.push(['Total Rows Read', stats.totalRows]);
-        data.push(['Rows Included in Analysis', stats.includedRows]);
-        data.push(['Rows Excluded (negative/zero)', negatives.py.count + negatives.cy.count]);
-        data.push(['Rows Outside Analysis Periods', stats.outsidePeriodRows]);
-        data.push(['Rows with Parse Errors', stats.parseErrors]);
-        
+
+        // Check if multi-year mode
+        const isMultiYear = !negatives.py && !negatives.cy;
+
+        if (isMultiYear) {
+            // Multi-year mode: negatives keyed by year
+            const years = Object.keys(negatives).sort();
+            const headerRow = ['Metric', ...years.map(y => `FY ${y}`), 'Total'];
+
+            // Calculate totals
+            let totalCount = 0;
+            let totalSales = 0;
+            let totalQty = 0;
+            let totalCost = 0;
+
+            for (const year of years) {
+                totalCount += negatives[year].count;
+                totalSales += negatives[year].sales;
+                totalQty += negatives[year].quantity;
+                totalCost += negatives[year].cost;
+            }
+
+            data.push(['Summary']);
+            data.push(headerRow);
+
+            data.push(['Excluded Row Count', ...years.map(y => negatives[y].count), totalCount]);
+            data.push(['Excluded Sales Total', ...years.map(y => negatives[y].sales), totalSales]);
+            data.push(['Excluded Quantity Total', ...years.map(y => negatives[y].quantity), totalQty]);
+            data.push(['Excluded Cost Total', ...years.map(y => negatives[y].cost), totalCost]);
+            data.push([]);
+
+            // Processing stats
+            data.push(['Processing Statistics']);
+            data.push(['Metric', 'Value']);
+            data.push(['Total Rows Read', stats.totalRows]);
+            data.push(['Rows Included in Analysis', stats.includedRows]);
+            data.push(['Rows Excluded (negative/zero)', totalCount]);
+            data.push(['Rows Outside Analysis Periods', stats.outsidePeriodRows]);
+            data.push(['Rows with Parse Errors', stats.parseErrors]);
+
+        } else {
+            // Two-period mode: original behavior
+            data.push(['Summary']);
+            data.push(['Metric', 'Prior Year', 'Current Year / LTM', 'Total']);
+            data.push([
+                'Excluded Row Count',
+                negatives.py.count,
+                negatives.cy.count,
+                negatives.py.count + negatives.cy.count
+            ]);
+            data.push([
+                'Excluded Sales Total',
+                negatives.py.sales,
+                negatives.cy.sales,
+                negatives.py.sales + negatives.cy.sales
+            ]);
+            data.push([
+                'Excluded Quantity Total',
+                negatives.py.quantity,
+                negatives.cy.quantity,
+                negatives.py.quantity + negatives.cy.quantity
+            ]);
+            data.push([
+                'Excluded Cost Total',
+                negatives.py.cost,
+                negatives.cy.cost,
+                negatives.py.cost + negatives.cy.cost
+            ]);
+            data.push([]);
+
+            // Processing stats
+            data.push(['Processing Statistics']);
+            data.push(['Metric', 'Value']);
+            data.push(['Total Rows Read', stats.totalRows]);
+            data.push(['Rows Included in Analysis', stats.includedRows]);
+            data.push(['Rows Excluded (negative/zero)', negatives.py.count + negatives.cy.count]);
+            data.push(['Rows Outside Analysis Periods', stats.outsidePeriodRows]);
+            data.push(['Rows with Parse Errors', stats.parseErrors]);
+        }
+
         const ws = XLSX.utils.aoa_to_sheet(data);
-        
+
         ws['!cols'] = [
             { wch: 25 },
             { wch: 18 },
             { wch: 18 },
             { wch: 18 }
         ];
-        
+
         return ws;
     },
 
