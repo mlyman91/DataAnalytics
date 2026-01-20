@@ -20,31 +20,53 @@
 const BridgeCalculator = {
     /**
      * Calculate PVM bridge for aggregated data
-     * 
+     *
      * @param {Object[]} aggregatedData - Array of LOD buckets
      * @param {Object} options - Calculation options
      * @param {string} options.mode - 'pvm' or 'gm'
      * @param {string} options.gmPriceDefinition - For GM mode: 'margin-per-unit' or 'sales-per-unit'
+     * @param {boolean} options.isMultiYear - Whether this is multi-year data
+     * @param {Object[]} options.fiscalYears - Array of fiscal year configs (for multi-year)
      * @returns {Object} - Bridge results
      */
     calculate: function(aggregatedData, options = {}) {
         const mode = options.mode || 'pvm';
         const gmPriceDef = options.gmPriceDefinition || 'margin-per-unit';
-        
-        // Calculate bridge for each LOD combination
-        const detailResults = aggregatedData.map(bucket => {
-            return this._calculateBucket(bucket, mode, gmPriceDef);
-        });
-        
-        // Calculate summary totals
-        const summary = this._calculateSummary(detailResults, mode);
-        
-        return {
-            detail: detailResults,
-            summary: summary,
-            mode: mode,
-            gmPriceDefinition: gmPriceDef
-        };
+        const isMultiYear = options.isMultiYear || false;
+        const fiscalYears = options.fiscalYears || [];
+
+        if (isMultiYear && fiscalYears.length > 0) {
+            // Multi-year mode: calculate metrics for each year and YoY bridges
+            const detailResults = aggregatedData.map(bucket => {
+                return this._calculateMultiYearBucket(bucket, mode, gmPriceDef, fiscalYears);
+            });
+
+            const summary = this._calculateMultiYearSummary(detailResults, mode, fiscalYears);
+
+            return {
+                detail: detailResults,
+                summary: summary,
+                mode: mode,
+                gmPriceDefinition: gmPriceDef,
+                isMultiYear: true,
+                fiscalYears: fiscalYears
+            };
+        } else {
+            // Two-period mode: existing logic
+            const detailResults = aggregatedData.map(bucket => {
+                return this._calculateBucket(bucket, mode, gmPriceDef);
+            });
+
+            const summary = this._calculateSummary(detailResults, mode);
+
+            return {
+                detail: detailResults,
+                summary: summary,
+                mode: mode,
+                gmPriceDefinition: gmPriceDef,
+                isMultiYear: false
+            };
+        }
     },
 
     /**
@@ -225,6 +247,205 @@ const BridgeCalculator = {
         // Calculate overall change percentage
         summary.changePct = summary.py.value !== 0 ? ((summary.cy.value - summary.py.value) / Math.abs(summary.py.value)) * 100 : 0;
         
+        return summary;
+    },
+
+    /**
+     * Calculate multi-year metrics and YoY bridges for a single LOD bucket
+     *
+     * @private
+     * @param {Object} bucket - LOD bucket with years data
+     * @param {string} mode - 'pvm' or 'gm'
+     * @param {string} gmPriceDef - GM price definition
+     * @param {Object[]} fiscalYears - Array of fiscal year configs
+     * @returns {Object} - Multi-year result with years and bridges
+     */
+    _calculateMultiYearBucket: function(bucket, mode, gmPriceDef, fiscalYears) {
+        const result = {
+            lodKey: bucket.lodKey,
+            dimensions: bucket.dimensions,
+            years: {},
+            bridges: {}
+        };
+
+        // Calculate metrics for each year
+        for (const fyConfig of fiscalYears) {
+            const fy = fyConfig.fiscalYear;
+            const yearData = bucket.years[fy];
+
+            if (!yearData) continue;
+
+            let value;
+            if (mode === 'gm' && gmPriceDef === 'margin-per-unit') {
+                value = yearData.sales - yearData.cost;
+            } else {
+                value = yearData.sales;
+            }
+
+            const price = yearData.quantity > 0 ? value / yearData.quantity : 0;
+
+            result.years[fy] = {
+                sales: yearData.sales,
+                volume: yearData.quantity,
+                price: price,
+                cost: yearData.cost,
+                count: yearData.count,
+                value: value
+            };
+        }
+
+        // Calculate year-over-year bridges between consecutive years
+        for (let i = 0; i < fiscalYears.length - 1; i++) {
+            const prevFY = fiscalYears[i].fiscalYear;
+            const nextFY = fiscalYears[i + 1].fiscalYear;
+            const bridgeKey = `${prevFY}-${nextFY}`;
+
+            const py = result.years[prevFY];
+            const cy = result.years[nextFY];
+
+            if (!py || !cy) continue;
+
+            // Determine if this is new, discontinued, or continuing
+            const isNew = py.sales <= 0 || py.volume <= 0;
+            const isDiscontinued = cy.sales <= 0 || cy.volume <= 0;
+
+            const totalChange = cy.value - py.value;
+
+            let priceImpact = 0;
+            let volumeImpact = 0;
+            let mixImpact = 0;
+            let costImpact = 0;
+
+            if (isNew) {
+                // New item: all impact goes to volume
+                volumeImpact = totalChange;
+            } else if (isDiscontinued) {
+                // Discontinued: all impact goes to volume
+                volumeImpact = totalChange;
+            } else {
+                // Continuing item: calculate all components
+                // Price Impact = (CY Price - PY Price) × PY Volume
+                priceImpact = (cy.price - py.price) * py.volume;
+
+                // Volume Impact = (CY Volume - PY Volume) × PY Price
+                volumeImpact = (cy.volume - py.volume) * py.price;
+
+                // Mix Impact = Residual
+                mixImpact = totalChange - priceImpact - volumeImpact;
+            }
+
+            // Cost impact for GM mode
+            if (mode === 'gm' && gmPriceDef === 'sales-per-unit') {
+                costImpact = -(cy.cost - py.cost);
+            }
+
+            result.bridges[bridgeKey] = {
+                totalChange,
+                priceImpact,
+                volumeImpact,
+                mixImpact,
+                costImpact,
+                isNew,
+                isDiscontinued
+            };
+        }
+
+        return result;
+    },
+
+    /**
+     * Calculate multi-year summary totals
+     *
+     * @private
+     * @param {Object[]} detailResults - Array of multi-year detail results
+     * @param {string} mode - 'pvm' or 'gm'
+     * @param {Object[]} fiscalYears - Array of fiscal year configs
+     * @returns {Object} - Multi-year summary
+     */
+    _calculateMultiYearSummary: function(detailResults, mode, fiscalYears) {
+        const summary = {
+            years: {},
+            bridges: {},
+            counts: {
+                total: detailResults.length
+            }
+        };
+
+        // Initialize year totals
+        for (const fyConfig of fiscalYears) {
+            const fy = fyConfig.fiscalYear;
+            summary.years[fy] = {
+                value: 0,
+                sales: 0,
+                quantity: 0,
+                cost: 0,
+                count: 0
+            };
+        }
+
+        // Initialize bridge totals
+        for (let i = 0; i < fiscalYears.length - 1; i++) {
+            const prevFY = fiscalYears[i].fiscalYear;
+            const nextFY = fiscalYears[i + 1].fiscalYear;
+            const bridgeKey = `${prevFY}-${nextFY}`;
+
+            summary.bridges[bridgeKey] = {
+                totalChange: 0,
+                priceImpact: 0,
+                volumeImpact: 0,
+                mixImpact: 0,
+                costImpact: 0,
+                priceImpactPct: 0,
+                volumeImpactPct: 0,
+                mixImpactPct: 0,
+                costImpactPct: 0,
+                changePct: 0
+            };
+        }
+
+        // Sum up values from detail results
+        for (const result of detailResults) {
+            // Sum year values
+            for (const fy in result.years) {
+                const yearData = result.years[fy];
+                if (summary.years[fy]) {
+                    summary.years[fy].value += yearData.value;
+                    summary.years[fy].sales += yearData.sales;
+                    summary.years[fy].quantity += yearData.volume;
+                    summary.years[fy].cost += yearData.cost;
+                    summary.years[fy].count += yearData.count;
+                }
+            }
+
+            // Sum bridge values
+            for (const bridgeKey in result.bridges) {
+                const bridge = result.bridges[bridgeKey];
+                if (summary.bridges[bridgeKey]) {
+                    summary.bridges[bridgeKey].totalChange += bridge.totalChange;
+                    summary.bridges[bridgeKey].priceImpact += bridge.priceImpact;
+                    summary.bridges[bridgeKey].volumeImpact += bridge.volumeImpact;
+                    summary.bridges[bridgeKey].mixImpact += bridge.mixImpact;
+                    summary.bridges[bridgeKey].costImpact += bridge.costImpact;
+                }
+            }
+        }
+
+        // Calculate percentages for each bridge
+        for (const bridgeKey in summary.bridges) {
+            const bridge = summary.bridges[bridgeKey];
+            const totalChange = bridge.totalChange;
+
+            bridge.priceImpactPct = totalChange !== 0 ? (bridge.priceImpact / Math.abs(totalChange)) * 100 : 0;
+            bridge.volumeImpactPct = totalChange !== 0 ? (bridge.volumeImpact / Math.abs(totalChange)) * 100 : 0;
+            bridge.mixImpactPct = totalChange !== 0 ? (bridge.mixImpact / Math.abs(totalChange)) * 100 : 0;
+            bridge.costImpactPct = totalChange !== 0 ? (bridge.costImpact / Math.abs(totalChange)) * 100 : 0;
+
+            // Calculate overall change percentage
+            const [prevFY] = bridgeKey.split('-').map(Number);
+            const prevYearValue = summary.years[prevFY] ? summary.years[prevFY].value : 0;
+            bridge.changePct = prevYearValue !== 0 ? (totalChange / Math.abs(prevYearValue)) * 100 : 0;
+        }
+
         return summary;
     },
 
