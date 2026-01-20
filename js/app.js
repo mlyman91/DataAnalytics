@@ -10,13 +10,16 @@ const App = {
     state: {
         mode: 'pvm',
         file: null,
+        isExcelFile: false,
         headers: [],
         sampleRows: [],
         columnMappings: { date: null, sales: null, quantity: null, cost: null, dimensions: [] },
         dateFormat: null,
         detectedDateFormat: null,
         fyEndMonth: 12,
+        useLTM: true,
         ltmEndDate: null,
+        cyFiscalYear: null,
         pyRange: null,
         cyRange: null,
         dataDateRange: { min: null, max: null },
@@ -67,11 +70,17 @@ const App = {
     showScreen: function(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
-        
+
         const modeLabel = this.state.mode === 'gm' ? 'Gross Margin Mode' : 'Sales PVM Mode';
         document.querySelectorAll('.mode-indicator').forEach(el => el.textContent = modeLabel);
         document.querySelectorAll('.gm-only').forEach(el => el.classList.toggle('hidden', this.state.mode !== 'gm'));
         document.getElementById('gm-price-definition').classList.toggle('hidden', this.state.mode !== 'gm');
+    },
+
+    togglePeriodSections: function() {
+        const useLTM = this.state.useLTM;
+        document.getElementById('ltm-config-section').style.display = useLTM ? 'block' : 'none';
+        document.getElementById('cy-fiscal-year-section').style.display = useLTM ? 'none' : 'block';
     },
 
     bindEvents: function() {
@@ -141,6 +150,17 @@ const App = {
             this.updatePeriodPreviews();
         });
 
+        document.getElementById('use-ltm-period').addEventListener('change', (e) => {
+            this.state.useLTM = e.target.checked;
+            this.togglePeriodSections();
+            this.updatePeriodPreviews();
+        });
+
+        document.getElementById('cy-fiscal-year').addEventListener('change', (e) => {
+            this.state.cyFiscalYear = parseInt(e.target.value, 10);
+            this.updatePeriodPreviews();
+        });
+
         document.querySelectorAll('input[name="gm-price-def"]').forEach(radio => {
             radio.addEventListener('change', (e) => this.state.gmPriceDefinition = e.target.value);
         });
@@ -172,21 +192,28 @@ const App = {
     },
 
     async handleFileSelect(file) {
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            UIRenderer.showError('Please select a CSV file.');
+        const fileName = file.name.toLowerCase();
+        const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+        const isCsv = fileName.endsWith('.csv');
+
+        if (!isExcel && !isCsv) {
+            UIRenderer.showError('Please select a CSV or Excel file (.csv, .xlsx, .xls)');
             return;
         }
-        
+
         this.state.file = file;
+        this.state.isExcelFile = isExcel;
         document.getElementById('file-info').classList.remove('hidden');
         document.getElementById('file-name').textContent = file.name;
         document.getElementById('file-size').textContent = this.formatFileSize(file.size);
-        
+
         try {
-            const { headers, sampleRows } = await CSVParser.scanFile(file, 100);
+            // Use appropriate parser based on file type
+            const parser = isExcel ? ExcelParser : CSVParser;
+            const { headers, sampleRows } = await parser.scanFile(file, 100);
             this.state.headers = headers;
             this.state.sampleRows = sampleRows;
-            
+
             const mappings = CSVParser.detectColumnMappings(headers, sampleRows);
             this.state.columnMappings = mappings;
             

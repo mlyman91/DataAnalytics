@@ -69,9 +69,9 @@
                 <div class="upload-area" id="upload-area">
                     <div class="upload-content">
                         <span class="upload-icon">📁</span>
-                        <p class="upload-text">Drag & drop your CSV file here</p>
-                        <p class="upload-subtext">or click to browse</p>
-                        <input type="file" id="file-input" accept=".csv" hidden>
+                        <p class="upload-text">Drag & drop your CSV or Excel file here</p>
+                        <p class="upload-subtext">or click to browse (.csv, .xlsx, .xls)</p>
+                        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" hidden>
                     </div>
                 </div>
 
@@ -189,11 +189,31 @@
                     </div>
 
                     <div class="config-section">
+                        <h3>Current Period Type</h3>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="use-ltm-period" checked>
+                            Use LTM (Last Twelve Months) for current period
+                        </label>
+                        <p class="period-help" style="margin-top: 8px; font-size: 0.9em; color: var(--color-muted);">
+                            When unchecked, the current period will use a full fiscal year instead of LTM.
+                        </p>
+                    </div>
+
+                    <div class="config-section" id="ltm-config-section">
                         <h3>LTM End Date</h3>
                         <p>Confirm the end date for Last Twelve Months calculation:</p>
                         <input type="date" id="ltm-end-date" class="date-input">
                         <p class="ltm-help">
                             LTM period will be: <span id="ltm-range-preview">--</span>
+                        </p>
+                    </div>
+
+                    <div class="config-section" id="cy-fiscal-year-section" style="display: none;">
+                        <h3>Current Fiscal Year</h3>
+                        <p>Select the fiscal year for the current period:</p>
+                        <input type="number" id="cy-fiscal-year" class="date-input" min="2000" max="2100" style="width: 120px;">
+                        <p class="cy-help">
+                            Current FY period will be: <span id="cy-range-preview">--</span>
                         </p>
                     </div>
 
@@ -502,6 +522,7 @@
     <script src="js/config.js"></script>
     <script src="js/period-utils.js"></script>
     <script src="js/csv-parser.js"></script>
+    <script src="js/excel-parser.js"></script>
     <script src="js/aggregator.js"></script>
     <script src="js/bridge-calculator.js"></script>
     <script src="js/ui-renderer.js"></script>

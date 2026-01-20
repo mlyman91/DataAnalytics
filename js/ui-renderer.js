@@ -68,8 +68,11 @@ const UIRenderer = {
      */
     createElement: function(tag, attrs = {}, children = []) {
         const el = document.createElement(tag);
-        
+
         for (const [key, value] of Object.entries(attrs)) {
+            // Skip null/undefined values
+            if (value === null || value === undefined) continue;
+
             if (key === 'className') {
                 el.className = value;
             } else if (key === 'textContent') {

@@ -20,7 +20,9 @@ Object.assign(App, {
         const dateFormat = this.state.dateFormat;
         let minDate = null, maxDate = null, rowCount = 0;
 
-        await CSVParser.parseFile(this.state.file, {
+        // Use appropriate parser based on file type
+        const parser = this.state.isExcelFile ? ExcelParser : CSVParser;
+        await parser.parseFile(this.state.file, {
             onRow: (row) => {
                 rowCount++;
                 const date = PeriodUtils.parseDate(row[dateColumn], dateFormat);
@@ -35,8 +37,20 @@ Object.assign(App, {
                 if (minDate && maxDate) {
                     info.innerHTML = `<p><strong>Date Range:</strong> ${PeriodUtils.formatDate(minDate)} to ${PeriodUtils.formatDate(maxDate)}</p>
                         <p><strong>Total Rows:</strong> ${rowCount.toLocaleString()}</p>`;
+
+                    // Set default LTM end date
                     this.state.ltmEndDate = maxDate;
                     document.getElementById('ltm-end-date').value = PeriodUtils.toISODateString(maxDate);
+
+                    // Set default current fiscal year based on max date
+                    const maxYear = maxDate.getFullYear();
+                    const maxMonth = maxDate.getMonth() + 1;
+                    const fyEndMonth = this.state.fyEndMonth;
+                    // If we're past the FY end month, we're in the next fiscal year
+                    const currentFY = maxMonth > fyEndMonth ? maxYear + 1 : maxYear;
+                    this.state.cyFiscalYear = currentFY;
+                    document.getElementById('cy-fiscal-year').value = currentFY;
+
                     this.updatePeriodPreviews();
                 } else {
                     info.innerHTML = '<p>Could not determine date range.</p>';
@@ -49,29 +63,59 @@ Object.assign(App, {
     },
 
     updatePeriodPreviews() {
-        const { fyEndMonth, ltmEndDate } = this.state;
-        if (!ltmEndDate) return;
+        const { fyEndMonth, ltmEndDate, useLTM, cyFiscalYear } = this.state;
 
-        const cyRange = PeriodUtils.getLTMRange(ltmEndDate);
-        this.state.cyRange = cyRange;
+        let cyRange, pyRange, currentFY, priorFY;
 
-        const priorFY = PeriodUtils.getPriorFiscalYear(ltmEndDate, fyEndMonth);
-        const pyRange = PeriodUtils.getFiscalYearRange(priorFY, fyEndMonth);
-        this.state.pyRange = pyRange;
+        if (useLTM) {
+            // LTM mode
+            if (!ltmEndDate) return;
 
-        document.getElementById('ltm-range-preview').textContent = PeriodUtils.formatDateRange(cyRange.start, cyRange.end);
-        document.getElementById('pfy-range').textContent = `FY ${priorFY}: ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}`;
+            cyRange = PeriodUtils.getLTMRange(ltmEndDate);
+            this.state.cyRange = cyRange;
 
-        const summary = document.getElementById('period-summary');
-        summary.innerHTML = `<p><strong>Comparison:</strong></p>
-            <p>Prior Year (FY ${priorFY}): ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}</p>
-            <p>vs. LTM: ${PeriodUtils.formatDateRange(cyRange.start, cyRange.end)}</p>`;
+            priorFY = PeriodUtils.getPriorFiscalYear(ltmEndDate, fyEndMonth);
+            pyRange = PeriodUtils.getFiscalYearRange(priorFY, fyEndMonth);
+            this.state.pyRange = pyRange;
 
-        const validation = PeriodUtils.validatePeriodConfig({ fyEndMonth, ltmEndDate, pyRange, cyRange });
-        if (validation.warnings.length > 0) {
-            summary.innerHTML += `<p style="color: var(--color-warning);">⚠️ ${validation.warnings.join(' ')}</p>`;
+            document.getElementById('ltm-range-preview').textContent = PeriodUtils.formatDateRange(cyRange.start, cyRange.end);
+            document.getElementById('pfy-range').textContent = `FY ${priorFY}: ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}`;
+
+            const summary = document.getElementById('period-summary');
+            summary.innerHTML = `<p><strong>Comparison:</strong></p>
+                <p>Prior Year (FY ${priorFY}): ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}</p>
+                <p>vs. LTM: ${PeriodUtils.formatDateRange(cyRange.start, cyRange.end)}</p>`;
+
+            const validation = PeriodUtils.validatePeriodConfig({ fyEndMonth, ltmEndDate, pyRange, cyRange });
+            if (validation.warnings.length > 0) {
+                summary.innerHTML += `<p style="color: var(--color-warning);">⚠️ ${validation.warnings.join(' ')}</p>`;
+            }
+            document.getElementById('btn-to-lod').disabled = !validation.valid;
+
+        } else {
+            // Fiscal Year mode
+            if (!cyFiscalYear) return;
+
+            currentFY = cyFiscalYear;
+            priorFY = currentFY - 1;
+
+            cyRange = PeriodUtils.getFiscalYearRange(currentFY, fyEndMonth);
+            this.state.cyRange = cyRange;
+
+            pyRange = PeriodUtils.getFiscalYearRange(priorFY, fyEndMonth);
+            this.state.pyRange = pyRange;
+
+            document.getElementById('cy-range-preview').textContent = `FY ${currentFY}: ${PeriodUtils.formatDateRange(cyRange.start, cyRange.end)}`;
+            document.getElementById('pfy-range').textContent = `FY ${priorFY}: ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}`;
+
+            const summary = document.getElementById('period-summary');
+            summary.innerHTML = `<p><strong>Comparison:</strong></p>
+                <p>Prior Year (FY ${priorFY}): ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}</p>
+                <p>vs. Current Year (FY ${currentFY}): ${PeriodUtils.formatDateRange(cyRange.start, cyRange.end)}</p>`;
+
+            // Validate (no warnings for fiscal year mode typically)
+            document.getElementById('btn-to-lod').disabled = false;
         }
-        document.getElementById('btn-to-lod').disabled = !validation.valid;
     },
 
     goToLOD() {
@@ -154,7 +198,9 @@ Object.assign(App, {
                 cyRange: this.state.cyRange
             });
 
-            await CSVParser.parseFile(this.state.file, {
+            // Use appropriate parser based on file type
+            const parser = this.state.isExcelFile ? ExcelParser : CSVParser;
+            await parser.parseFile(this.state.file, {
                 onRow: (row, rowNum) => {
                     Aggregator.processRow(ctx, row);
                 },
