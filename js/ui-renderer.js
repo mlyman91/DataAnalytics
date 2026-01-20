@@ -224,34 +224,40 @@ const UIRenderer = {
     /**
      * Render detail table header
      */
-    renderDetailTableHeader: function(dimensions, mode) {
+    renderDetailTableHeader: function(dimensions, mode, pyLabel, cyLabel) {
         const thead = document.getElementById('detail-table-head');
         this.clearElement(thead);
-        
+
         const tr = this.createElement('tr');
-        
+
         // Dimension columns
         for (const dim of dimensions) {
             tr.appendChild(this.createElement('th', {}, [dim]));
         }
-        
+
         // Classification
         tr.appendChild(this.createElement('th', {}, ['Status']));
-        
-        // PY/CY values
-        tr.appendChild(this.createElement('th', { className: 'num' }, ['PY Value']));
-        tr.appendChild(this.createElement('th', { className: 'num' }, ['CY Value']));
-        
+
+        // PY values by metric
+        tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Sales`]));
+        tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Volume`]));
+        tr.appendChild(this.createElement('th', { className: 'num' }, [`${pyLabel} Avg Price`]));
+
+        // CY values by metric
+        tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Sales`]));
+        tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Volume`]));
+        tr.appendChild(this.createElement('th', { className: 'num' }, [`${cyLabel} Avg Price`]));
+
         // Bridge components
         tr.appendChild(this.createElement('th', { className: 'num' }, ['Total Change']));
         tr.appendChild(this.createElement('th', { className: 'num' }, ['Price Impact']));
         tr.appendChild(this.createElement('th', { className: 'num' }, ['Volume Impact']));
         tr.appendChild(this.createElement('th', { className: 'num' }, ['Mix Impact']));
-        
+
         if (mode === 'gm') {
             tr.appendChild(this.createElement('th', { className: 'num' }, ['Cost Impact']));
         }
-        
+
         thead.appendChild(tr);
     },
 
@@ -275,20 +281,34 @@ const UIRenderer = {
             }
             
             // Classification
-            const statusClass = result.classification === 'new' ? 'positive' : 
+            const statusClass = result.classification === 'new' ? 'positive' :
                                result.classification === 'discontinued' ? 'negative' : '';
             tr.appendChild(this.createElement('td', { className: statusClass }, [
                 result.classification.charAt(0).toUpperCase() + result.classification.slice(1)
             ]));
-            
-            // PY/CY values
+
+            // PY values: Sales, Volume, Avg Price
             tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.py.value, 'currency')
+                this.formatNumber(result.py.sales, 'currency')
             ]));
             tr.appendChild(this.createElement('td', { className: 'num' }, [
-                this.formatNumber(result.cy.value, 'currency')
+                this.formatNumber(result.py.volume, 'number')
             ]));
-            
+            tr.appendChild(this.createElement('td', { className: 'num' }, [
+                this.formatNumber(result.py.price, 'currency')
+            ]));
+
+            // CY values: Sales, Volume, Avg Price
+            tr.appendChild(this.createElement('td', { className: 'num' }, [
+                this.formatNumber(result.cy.sales, 'currency')
+            ]));
+            tr.appendChild(this.createElement('td', { className: 'num' }, [
+                this.formatNumber(result.cy.volume, 'number')
+            ]));
+            tr.appendChild(this.createElement('td', { className: 'num' }, [
+                this.formatNumber(result.cy.price, 'currency')
+            ]));
+
             // Bridge components
             const totalClass = 'num ' + (result.totalChange >= 0 ? 'positive' : 'negative');
             tr.appendChild(this.createElement('td', { className: totalClass }, [

@@ -78,6 +78,11 @@ Object.assign(App, {
             pyRange = PeriodUtils.getFiscalYearRange(priorFY, fyEndMonth);
             this.state.pyRange = pyRange;
 
+            // Store fiscal year labels
+            this.state.pyFiscalYear = priorFY;
+            this.state.pyLabel = `FY ${priorFY}`;
+            this.state.cyLabel = 'LTM';
+
             document.getElementById('ltm-range-preview').textContent = PeriodUtils.formatDateRange(cyRange.start, cyRange.end);
             document.getElementById('pfy-range').textContent = `FY ${priorFY}: ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}`;
 
@@ -104,6 +109,12 @@ Object.assign(App, {
 
             pyRange = PeriodUtils.getFiscalYearRange(priorFY, fyEndMonth);
             this.state.pyRange = pyRange;
+
+            // Store fiscal year labels
+            this.state.pyFiscalYear = priorFY;
+            this.state.cyFiscalYear = currentFY;
+            this.state.pyLabel = `FY ${priorFY}`;
+            this.state.cyLabel = `FY ${currentFY}`;
 
             document.getElementById('cy-range-preview').textContent = `FY ${currentFY}: ${PeriodUtils.formatDateRange(cyRange.start, cyRange.end)}`;
             document.getElementById('pfy-range').textContent = `FY ${priorFY}: ${PeriodUtils.formatDateRange(pyRange.start, pyRange.end)}`;
@@ -281,7 +292,7 @@ Object.assign(App, {
         UIRenderer.renderBridgeSummary(summary, mode, aggregationResults.negatives);
 
         // Detail table
-        UIRenderer.renderDetailTableHeader(selectedDimensions, mode);
+        UIRenderer.renderDetailTableHeader(selectedDimensions, mode, this.state.pyLabel, this.state.cyLabel);
         this.renderDetailTable();
 
         // Negatives table
@@ -327,6 +338,8 @@ Object.assign(App, {
             fyEndMonth: this.state.fyEndMonth,
             pyRange: this.state.pyRange,
             cyRange: this.state.cyRange,
+            pyLabel: this.state.pyLabel,
+            cyLabel: this.state.cyLabel,
             dimensions: this.state.selectedDimensions,
             dateColumn: this.state.columnMappings.date,
             salesColumn: this.state.columnMappings.sales,

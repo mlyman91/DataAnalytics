@@ -64,10 +64,13 @@ const ExcelExport = {
         data.push([]);
         
         // Period summary
+        const pyLabel = config.pyLabel || 'Prior Year';
+        const cyLabel = config.cyLabel || 'Current Year';
+
         data.push(['Period Summary']);
         data.push(['Period', 'Start Date', 'End Date', 'Value', 'Quantity', 'Transactions']);
         data.push([
-            'Prior Year',
+            pyLabel,
             PeriodUtils.formatDate(config.pyRange.start),
             PeriodUtils.formatDate(config.pyRange.end),
             summary.py.value,
@@ -75,7 +78,7 @@ const ExcelExport = {
             summary.py.count
         ]);
         data.push([
-            'Current Year / LTM',
+            cyLabel,
             PeriodUtils.formatDate(config.cyRange.start),
             PeriodUtils.formatDate(config.cyRange.end),
             summary.cy.value,
@@ -87,22 +90,22 @@ const ExcelExport = {
         // Bridge components
         data.push(['Bridge Analysis']);
         data.push(['Component', 'Impact ($)', '% of Total Change']);
-        data.push(['Prior Year Starting Value', summary.py.value, '']);
+        data.push([`${pyLabel} Starting Value`, summary.py.value, '']);
         data.push(['Price Impact', summary.priceImpact, summary.priceImpactPct / 100]);
         data.push(['Volume Impact', summary.volumeImpact, summary.volumeImpactPct / 100]);
         data.push(['Mix Impact', summary.mixImpact, summary.mixImpactPct / 100]);
-        
+
         if (config.mode === 'gm' && summary.costImpact !== 0) {
             data.push(['Cost Impact', summary.costImpact, summary.costImpactPct / 100]);
         }
-        
+
         // Negative values row
         const negTotal = negatives.cy.sales - negatives.py.sales;
         if (negTotal !== 0) {
             data.push(['Negative Values (excluded from above)', negTotal, '']);
         }
-        
-        data.push(['Current Year / LTM Ending Value', summary.cy.value, '']);
+
+        data.push([`${cyLabel} Ending Value`, summary.cy.value, '']);
         data.push([]);
         
         // Total change summary
@@ -139,58 +142,113 @@ const ExcelExport = {
     _createDetailSheet: function(detail, config) {
         const data = [];
         const dimensions = config.dimensions || [];
-        
-        // Header row
+
+        // Determine fiscal year labels
+        const pyLabel = config.pyLabel || 'PY';
+        const cyLabel = config.cyLabel || 'CY';
+
+        // Header row with actual fiscal year labels
         const headerRow = [
             ...dimensions,
             'Status',
-            'PY Value',
-            'PY Quantity',
-            'PY Price',
-            'CY Value',
-            'CY Quantity',
-            'CY Price',
+            `${pyLabel} Sales`,
+            `${pyLabel} Volume`,
+            `${pyLabel} Avg Price`,
+            `${cyLabel} Sales`,
+            `${cyLabel} Volume`,
+            `${cyLabel} Avg Price`,
             'Total Change',
             'Price Impact',
             'Volume Impact',
             'Mix Impact'
         ];
-        
+
         if (config.mode === 'gm') {
             headerRow.push('Cost Impact');
-            headerRow.push('PY Cost');
-            headerRow.push('CY Cost');
         }
-        
+
         data.push(headerRow);
-        
-        // Data rows
-        for (const row of detail) {
+
+        // Data rows with formulas for bridge calculations
+        for (let i = 0; i < detail.length; i++) {
+            const row = detail[i];
+            const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
+            const dimCount = dimensions.length;
+
+            // Base columns: dimensions + status + PY sales/vol/price + CY sales/vol/price
             const dataRow = [
                 ...dimensions.map(d => row.dimensions[d] || 'Unknown'),
                 row.classification,
-                row.py.value,
+                row.py.sales,
                 row.py.volume,
                 row.py.price,
-                row.cy.value,
+                row.cy.sales,
                 row.cy.volume,
-                row.cy.price,
-                row.totalChange,
-                row.priceImpact,
-                row.volumeImpact,
-                row.mixImpact
+                row.cy.price
             ];
-            
-            if (config.mode === 'gm') {
-                dataRow.push(row.costImpact);
-                dataRow.push(row.py.cost);
-                dataRow.push(row.cy.cost);
-            }
-            
+
             data.push(dataRow);
         }
-        
+
+        // Create worksheet from data
         const ws = XLSX.utils.aoa_to_sheet(data);
+
+        // Now add formulas for bridge calculations
+        const dimCount = dimensions.length;
+        const statusCol = dimCount;
+        const pySalesCol = dimCount + 1;
+        const pyVolCol = dimCount + 2;
+        const pyPriceCol = dimCount + 3;
+        const cySalesCol = dimCount + 4;
+        const cyVolCol = dimCount + 5;
+        const cyPriceCol = dimCount + 6;
+        const totalChangeCol = dimCount + 7;
+        const priceImpactCol = dimCount + 8;
+        const volumeImpactCol = dimCount + 9;
+        const mixImpactCol = dimCount + 10;
+
+        // Add formulas for each row
+        for (let i = 0; i < detail.length; i++) {
+            const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
+
+            // Column letter helper
+            const colLetter = (col) => {
+                let letter = '';
+                let num = col;
+                while (num >= 0) {
+                    letter = String.fromCharCode((num % 26) + 65) + letter;
+                    num = Math.floor(num / 26) - 1;
+                }
+                return letter;
+            };
+
+            const pySales = `${colLetter(pySalesCol)}${rowNum}`;
+            const pyVol = `${colLetter(pyVolCol)}${rowNum}`;
+            const pyPrice = `${colLetter(pyPriceCol)}${rowNum}`;
+            const cySales = `${colLetter(cySalesCol)}${rowNum}`;
+            const cyVol = `${colLetter(cyVolCol)}${rowNum}`;
+            const cyPrice = `${colLetter(cyPriceCol)}${rowNum}`;
+            const totalChange = `${colLetter(totalChangeCol)}${rowNum}`;
+            const priceImpact = `${colLetter(priceImpactCol)}${rowNum}`;
+            const volumeImpact = `${colLetter(volumeImpactCol)}${rowNum}`;
+
+            // Total Change = CY Sales - PY Sales
+            ws[totalChange] = { f: `${cySales}-${pySales}`, t: 'n' };
+
+            // Price Impact = (CY Price - PY Price) × PY Volume
+            ws[priceImpact] = { f: `(${cyPrice}-${pyPrice})*${pyVol}`, t: 'n' };
+
+            // Volume Impact = (CY Volume - PY Volume) × PY Price
+            ws[volumeImpact] = { f: `(${cyVol}-${pyVol})*${pyPrice}`, t: 'n' };
+
+            // Mix Impact = Total Change - Price Impact - Volume Impact
+            ws[`${colLetter(mixImpactCol)}${rowNum}`] = { f: `${totalChange}-${priceImpact}-${volumeImpact}`, t: 'n' };
+
+            if (config.mode === 'gm') {
+                // Add Cost Impact formula if needed
+                // For now, we'll skip this as it's more complex
+            }
+        }
         
         // Set column widths
         const cols = [];
