@@ -641,18 +641,34 @@ const UIRenderer = {
     renderAssumptions: function(config, stats, methodology) {
         const configBody = document.getElementById('assumptions-config');
         this.clearElement(configBody);
-        
+
         const configRows = [
             ['Analysis Mode', config.mode === 'gm' ? 'Gross Margin Bridge' : 'Sales PVM Bridge'],
-            ['Fiscal Year End', CONFIG.MONTH_NAMES[config.fyEndMonth - 1]],
-            ['Prior Year Period', PeriodUtils.formatDateRange(config.pyRange.start, config.pyRange.end)],
-            ['LTM Period', PeriodUtils.formatDateRange(config.cyRange.start, config.cyRange.end)],
+            ['Fiscal Year End', CONFIG.MONTH_NAMES[config.fyEndMonth - 1]]
+        ];
+
+        // Add period information based on mode
+        if (config.fiscalYears && config.fiscalYears.length > 0) {
+            // Multi-year mode
+            const yearLabels = config.fiscalYears.map(fy => fy.label || `FY ${fy.fiscalYear}`).join(', ');
+            const firstYear = config.fiscalYears[0];
+            const lastYear = config.fiscalYears[config.fiscalYears.length - 1];
+            configRows.push(['Analysis Type', 'Multi-Year Comparison']);
+            configRows.push(['Fiscal Years', yearLabels]);
+            configRows.push(['Date Range', `${PeriodUtils.formatDate(firstYear.start)} to ${PeriodUtils.formatDate(lastYear.end)}`]);
+        } else if (config.pyRange && config.cyRange) {
+            // Two-period mode
+            configRows.push(['Prior Year Period', PeriodUtils.formatDateRange(config.pyRange.start, config.pyRange.end)]);
+            configRows.push(['LTM Period', PeriodUtils.formatDateRange(config.cyRange.start, config.cyRange.end)]);
+        }
+
+        configRows.push(
             ['Level of Detail', config.dimensions.length > 0 ? config.dimensions.join(', ') : 'Total Only'],
             ['Total Rows Processed', stats.totalRows.toLocaleString()],
             ['Rows Included in Analysis', stats.includedRows.toLocaleString()],
             ['Rows Excluded', stats.excludedRows.toLocaleString()],
             ['Unique LOD Combinations', stats.uniqueLODKeys.toLocaleString()]
-        ];
+        );
         
         if (config.mode === 'gm') {
             configRows.splice(1, 0, ['GM Price Definition', 

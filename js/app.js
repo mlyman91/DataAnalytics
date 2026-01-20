@@ -149,7 +149,34 @@ const App = {
 
         document.getElementById('fy-end-month').addEventListener('change', (e) => {
             this.state.fyEndMonth = parseInt(e.target.value, 10);
-            this.updatePeriodPreviews();
+
+            // Re-detect fiscal years if we have date range data
+            if (this.state.dataDateRange.min && this.state.dataDateRange.max) {
+                const fiscalYears = PeriodUtils.detectFiscalYears(
+                    this.state.dataDateRange.min,
+                    this.state.dataDateRange.max,
+                    this.state.fyEndMonth
+                );
+                this.state.detectedFiscalYears = fiscalYears;
+                const fullYears = fiscalYears.filter(y => y.fullyCovered);
+                this.state.hasMultipleYears = fullYears.length >= 2;
+
+                // If in multi-year mode, update the selection UI
+                if (this.state.hasMultipleYears && fullYears.length >= 2) {
+                    // Reset selected years when FY end changes
+                    this.state.selectedFiscalYears = [];
+                    this.showMultiYearSelection(fullYears);
+                } else {
+                    // Switch to two-period mode
+                    document.getElementById('multi-year-section').style.display = 'none';
+                    document.getElementById('two-period-config').style.display = 'block';
+                    this.state.useMultiYearMode = false;
+                    this.updatePeriodPreviews();
+                }
+            } else {
+                this.updatePeriodPreviews();
+            }
+
             this.savePreferences();
         });
 

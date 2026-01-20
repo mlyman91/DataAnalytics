@@ -437,8 +437,15 @@ Object.assign(App, {
             [];
 
         // Period labels
-        const pyLabel = PeriodUtils.formatDateRange(pyRange.start, pyRange.end);
-        const cyLabel = PeriodUtils.formatDateRange(cyRange.start, cyRange.end);
+        let pyLabel, cyLabel;
+        if (isMultiYear) {
+            // In multi-year mode, labels are handled differently (first year, last year)
+            pyLabel = '';
+            cyLabel = '';
+        } else {
+            pyLabel = pyRange ? PeriodUtils.formatDateRange(pyRange.start, pyRange.end) : '';
+            cyLabel = cyRange ? PeriodUtils.formatDateRange(cyRange.start, cyRange.end) : '';
+        }
 
         // Summary cards
         UIRenderer.renderSummaryCards(summary, pyLabel, cyLabel);
@@ -455,7 +462,7 @@ Object.assign(App, {
 
         // Assumptions
         const methodology = BridgeCalculator.getMethodologyDescription(mode, gmPriceDefinition);
-        UIRenderer.renderAssumptions({
+        const assumptionsConfig = {
             mode,
             gmPriceDefinition,
             fyEndMonth: this.state.fyEndMonth,
@@ -466,7 +473,14 @@ Object.assign(App, {
             salesColumn: this.state.columnMappings.sales,
             quantityColumn: this.state.columnMappings.quantity,
             costColumn: this.state.columnMappings.cost
-        }, aggregationResults.stats, methodology);
+        };
+
+        // Add fiscal years if in multi-year mode
+        if (isMultiYear) {
+            assumptionsConfig.fiscalYears = fiscalYears;
+        }
+
+        UIRenderer.renderAssumptions(assumptionsConfig, aggregationResults.stats, methodology);
 
         this.switchTab('summary');
     },
@@ -510,8 +524,10 @@ Object.assign(App, {
         };
 
         // Add fiscal years if in multi-year mode
-        if (isMultiYear && this.state.detectedFiscalYears) {
-            config.fiscalYears = this.state.detectedFiscalYears.filter(y => y.fullyCovered);
+        if (isMultiYear && this.state.selectedFiscalYears) {
+            config.fiscalYears = this.state.detectedFiscalYears.filter(fy =>
+                this.state.selectedFiscalYears.includes(fy.fiscalYear)
+            );
         }
 
         ExcelExport.exportToExcel(this.state.bridgeResults, this.state.aggregationResults, config);
