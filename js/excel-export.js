@@ -83,28 +83,41 @@ const ExcelExport = {
 
             // Year-over-year bridge analysis
             data.push(['Year-over-Year Bridge Analysis']);
-            data.push(['Component', 'Impact ($)']);
+            data.push(['Component', 'Impact ($)', '% of Change']);
 
-            data.push([`FY ${years[0]} Starting Value`, summary.years[years[0]].value]);
+            // Add each year with bridge impacts to next year
+            for (let i = 0; i < years.length; i++) {
+                const year = years[i];
+                const yearData = summary.years[year];
 
-            for (let i = 0; i < years.length - 1; i++) {
-                const y1 = years[i];
-                const y2 = years[i + 1];
-                const bridgeKey = `${y1}-${y2}`;
-                const bridge = summary.bridges[bridgeKey];
+                // Year total row
+                data.push([`FY ${year}`, yearData.value, '']);
 
-                if (bridge) {
-                    data.push([`${y1}→${y2} Price Impact`, bridge.priceImpact]);
-                    data.push([`${y1}→${y2} Volume Impact`, bridge.volumeImpact]);
-                    data.push([`${y1}→${y2} Mix Impact`, bridge.mixImpact]);
+                // If not the last year, show bridge to next year
+                if (i < years.length - 1) {
+                    const nextYear = years[i + 1];
+                    const bridgeKey = `${year}-${nextYear}`;
+                    const bridge = summary.bridges[bridgeKey];
 
-                    if (config.mode === 'gm' && bridge.costImpact !== 0) {
-                        data.push([`${y1}→${y2} Cost Impact`, bridge.costImpact]);
+                    if (bridge) {
+                        // Calculate percentages based on starting year value
+                        const startValue = yearData.value;
+                        const pricePct = startValue !== 0 ? (bridge.priceImpact / Math.abs(startValue)) * 100 : 0;
+                        const volumePct = startValue !== 0 ? (bridge.volumeImpact / Math.abs(startValue)) * 100 : 0;
+                        const mixPct = startValue !== 0 ? (bridge.mixImpact / Math.abs(startValue)) * 100 : 0;
+
+                        data.push([`${year}→${nextYear} Price Impact`, bridge.priceImpact, pricePct / 100]);
+                        data.push([`${year}→${nextYear} Volume Impact`, bridge.volumeImpact, volumePct / 100]);
+                        data.push([`${year}→${nextYear} Mix Impact`, bridge.mixImpact, mixPct / 100]);
+
+                        if (config.mode === 'gm' && bridge.costImpact !== 0) {
+                            const costPct = startValue !== 0 ? (bridge.costImpact / Math.abs(startValue)) * 100 : 0;
+                            data.push([`${year}→${nextYear} Cost Impact`, bridge.costImpact, costPct / 100]);
+                        }
                     }
                 }
             }
 
-            data.push([`FY ${years[years.length - 1]} Ending Value`, summary.years[years[years.length - 1]].value]);
             data.push([]);
 
             // LOD counts
@@ -182,10 +195,21 @@ const ExcelExport = {
                 const cell_address = XLSX.utils.encode_cell({r: R, c: C});
                 if (!ws[cell_address]) continue;
 
-                // Format currency columns (columns 1-3+ are values)
-                if (C >= 1 && typeof ws[cell_address].v === 'number') {
-                    ws[cell_address].z = '$#,##0';
-                    ws[cell_address].t = 'n';
+                // Format based on column position
+                if (typeof ws[cell_address].v === 'number') {
+                    if (C === 1) {
+                        // Column 1: Currency format
+                        ws[cell_address].z = '$#,##0';
+                        ws[cell_address].t = 'n';
+                    } else if (C === 2) {
+                        // Column 2: Percentage format
+                        ws[cell_address].z = '0.0%';
+                        ws[cell_address].t = 'n';
+                    } else if (C >= 3) {
+                        // Other number columns: comma format
+                        ws[cell_address].z = '#,##0';
+                        ws[cell_address].t = 'n';
+                    }
                 }
             }
         }
@@ -218,29 +242,58 @@ const ExcelExport = {
         let headerRow;
 
         if (isMultiYear) {
-            // Multi-year mode: header with all years and YoY bridges
+            // Multi-year mode: header grouped by KPI (all sales, all volume, all price, all impacts)
             headerRow = [...dimensions];
 
+            // Group 1: Annual Sales for all years
             for (let i = 0; i < fiscalYears.length; i++) {
-                const fy = fiscalYears[i];
-                const fyLabel = fy.label || `FY ${fy.fiscalYear}`;
-
-                // Year columns
+                const fyLabel = fiscalYears[i].label || `FY ${fiscalYears[i].fiscalYear}`;
                 headerRow.push(`${fyLabel} Sales`);
-                headerRow.push(`${fyLabel} Volume`);
-                headerRow.push(`${fyLabel} Avg Price`);
+            }
 
-                // YoY bridge columns (between this year and next)
-                if (i < fiscalYears.length - 1) {
+            // Group 2: Annual Volume for all years
+            for (let i = 0; i < fiscalYears.length; i++) {
+                const fyLabel = fiscalYears[i].label || `FY ${fiscalYears[i].fiscalYear}`;
+                headerRow.push(`${fyLabel} Volume`);
+            }
+
+            // Group 3: Annual Avg Price for all years
+            for (let i = 0; i < fiscalYears.length; i++) {
+                const fyLabel = fiscalYears[i].label || `FY ${fiscalYears[i].fiscalYear}`;
+                headerRow.push(`${fyLabel} Avg Price`);
+            }
+
+            // Group 4: Price Impacts (YoY)
+            for (let i = 0; i < fiscalYears.length - 1; i++) {
+                const fy = fiscalYears[i];
+                const nextFY = fiscalYears[i + 1];
+                const bridgeLabel = `${fy.fiscalYear}→${nextFY.fiscalYear}`;
+                headerRow.push(`${bridgeLabel} Price Impact`);
+            }
+
+            // Group 5: Volume Impacts (YoY)
+            for (let i = 0; i < fiscalYears.length - 1; i++) {
+                const fy = fiscalYears[i];
+                const nextFY = fiscalYears[i + 1];
+                const bridgeLabel = `${fy.fiscalYear}→${nextFY.fiscalYear}`;
+                headerRow.push(`${bridgeLabel} Volume Impact`);
+            }
+
+            // Group 6: Mix Impacts (YoY)
+            for (let i = 0; i < fiscalYears.length - 1; i++) {
+                const fy = fiscalYears[i];
+                const nextFY = fiscalYears[i + 1];
+                const bridgeLabel = `${fy.fiscalYear}→${nextFY.fiscalYear}`;
+                headerRow.push(`${bridgeLabel} Mix Impact`);
+            }
+
+            // Group 7: Cost Impacts (YoY) - if GM mode
+            if (config.mode === 'gm') {
+                for (let i = 0; i < fiscalYears.length - 1; i++) {
+                    const fy = fiscalYears[i];
                     const nextFY = fiscalYears[i + 1];
                     const bridgeLabel = `${fy.fiscalYear}→${nextFY.fiscalYear}`;
-                    headerRow.push(`${bridgeLabel} Price Δ`);
-                    headerRow.push(`${bridgeLabel} Vol Δ`);
-                    headerRow.push(`${bridgeLabel} Mix Δ`);
-
-                    if (config.mode === 'gm') {
-                        headerRow.push(`${bridgeLabel} Cost Δ`);
-                    }
+                    headerRow.push(`${bridgeLabel} Cost Impact`);
                 }
             }
         } else {
@@ -275,27 +328,47 @@ const ExcelExport = {
             const row = detail[i];
 
             if (isMultiYear) {
-                // Multi-year mode: populate all years
+                // Multi-year mode: populate grouped by KPI
                 const dataRow = [...dimensions.map(d => row.dimensions[d] || 'Unknown')];
 
+                // Group 1: Annual Sales for all years
                 for (let j = 0; j < fiscalYears.length; j++) {
                     const fy = fiscalYears[j].fiscalYear;
                     const yearData = row.years[fy] || { sales: 0, volume: 0, price: 0 };
-
-                    // Year data
                     dataRow.push(yearData.sales);
+                }
+
+                // Group 2: Annual Volume for all years
+                for (let j = 0; j < fiscalYears.length; j++) {
+                    const fy = fiscalYears[j].fiscalYear;
+                    const yearData = row.years[fy] || { sales: 0, volume: 0, price: 0 };
                     dataRow.push(yearData.volume);
-                    dataRow.push(yearData.price);
+                }
 
-                    // YoY bridge values (will be replaced with formulas below)
-                    if (j < fiscalYears.length - 1) {
-                        dataRow.push(0); // Price Δ (formula)
-                        dataRow.push(0); // Vol Δ (formula)
-                        dataRow.push(0); // Mix Δ (formula)
+                // Group 3: Annual Avg Price for all years (will be replaced with formulas)
+                for (let j = 0; j < fiscalYears.length; j++) {
+                    dataRow.push(0); // Placeholder for formula
+                }
 
-                        if (config.mode === 'gm') {
-                            dataRow.push(0); // Cost Δ (formula)
-                        }
+                // Group 4: Price Impacts (YoY) - placeholders for formulas
+                for (let j = 0; j < fiscalYears.length - 1; j++) {
+                    dataRow.push(0);
+                }
+
+                // Group 5: Volume Impacts (YoY) - placeholders for formulas
+                for (let j = 0; j < fiscalYears.length - 1; j++) {
+                    dataRow.push(0);
+                }
+
+                // Group 6: Mix Impacts (YoY) - placeholders for formulas
+                for (let j = 0; j < fiscalYears.length - 1; j++) {
+                    dataRow.push(0);
+                }
+
+                // Group 7: Cost Impacts (YoY) - placeholders for formulas (if GM mode)
+                if (config.mode === 'gm') {
+                    for (let j = 0; j < fiscalYears.length - 1; j++) {
+                        dataRow.push(0);
                     }
                 }
 
@@ -335,50 +408,69 @@ const ExcelExport = {
         const dimCount = dimensions.length;
 
         if (isMultiYear) {
-            // Multi-year mode: add formulas for YoY bridges
+            // Multi-year mode: add formulas for grouped columns
+            const numYears = fiscalYears.length;
+            const numBridges = numYears - 1;
+
+            // Calculate column positions for each group
+            const salesStartCol = dimCount;
+            const volumeStartCol = dimCount + numYears;
+            const priceStartCol = dimCount + 2 * numYears;
+            const priceImpactStartCol = dimCount + 3 * numYears;
+            const volumeImpactStartCol = priceImpactStartCol + numBridges;
+            const mixImpactStartCol = volumeImpactStartCol + numBridges;
+            const costImpactStartCol = config.mode === 'gm' ? mixImpactStartCol + numBridges : -1;
+
             for (let i = 0; i < detail.length; i++) {
                 const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
-                let colIndex = dimCount;
 
-                for (let j = 0; j < fiscalYears.length; j++) {
-                    // Year columns: Sales, Volume, Price
-                    const salesCol = colIndex++;
-                    const volCol = colIndex++;
-                    const priceCol = colIndex++;
+                // Add Avg Price formulas: Sales / Volume for each year
+                for (let j = 0; j < numYears; j++) {
+                    const salesCol = salesStartCol + j;
+                    const volCol = volumeStartCol + j;
+                    const priceCol = priceStartCol + j;
 
-                    // YoY bridge formulas (between this year and next)
-                    if (j < fiscalYears.length - 1) {
-                        // Get next year column indices
-                        const nextSalesCol = colIndex + (config.mode === 'gm' ? 4 : 3);
-                        const nextVolCol = nextSalesCol + 1;
-                        const nextPriceCol = nextSalesCol + 2;
+                    ws[`${colLetter(priceCol)}${rowNum}`] = {
+                        f: `IF(${colLetter(volCol)}${rowNum}=0,0,${colLetter(salesCol)}${rowNum}/${colLetter(volCol)}${rowNum})`,
+                        t: 'n'
+                    };
+                }
 
-                        // Price Impact = (Next Price - This Price) × This Volume
-                        const priceImpactCol = colIndex++;
-                        ws[`${colLetter(priceImpactCol)}${rowNum}`] = {
-                            f: `(${colLetter(nextPriceCol)}${rowNum}-${colLetter(priceCol)}${rowNum})*${colLetter(volCol)}${rowNum}`,
-                            t: 'n'
-                        };
+                // Add YoY bridge impact formulas
+                for (let j = 0; j < numBridges; j++) {
+                    const thisSalesCol = salesStartCol + j;
+                    const thisVolCol = volumeStartCol + j;
+                    const thisPriceCol = priceStartCol + j;
+                    const nextSalesCol = salesStartCol + j + 1;
+                    const nextVolCol = volumeStartCol + j + 1;
+                    const nextPriceCol = priceStartCol + j + 1;
 
-                        // Volume Impact = (Next Volume - This Volume) × This Price
-                        const volImpactCol = colIndex++;
-                        ws[`${colLetter(volImpactCol)}${rowNum}`] = {
-                            f: `(${colLetter(nextVolCol)}${rowNum}-${colLetter(volCol)}${rowNum})*${colLetter(priceCol)}${rowNum}`,
-                            t: 'n'
-                        };
+                    const priceImpactCol = priceImpactStartCol + j;
+                    const volumeImpactCol = volumeImpactStartCol + j;
+                    const mixImpactCol = mixImpactStartCol + j;
 
-                        // Mix Impact = (Next Sales - This Sales) - Price Impact - Volume Impact
-                        const mixImpactCol = colIndex++;
-                        ws[`${colLetter(mixImpactCol)}${rowNum}`] = {
-                            f: `(${colLetter(nextSalesCol)}${rowNum}-${colLetter(salesCol)}${rowNum})-${colLetter(priceImpactCol)}${rowNum}-${colLetter(volImpactCol)}${rowNum}`,
-                            t: 'n'
-                        };
+                    // Price Impact = (Next Price - This Price) × This Volume
+                    ws[`${colLetter(priceImpactCol)}${rowNum}`] = {
+                        f: `(${colLetter(nextPriceCol)}${rowNum}-${colLetter(thisPriceCol)}${rowNum})*${colLetter(thisVolCol)}${rowNum}`,
+                        t: 'n'
+                    };
 
-                        if (config.mode === 'gm') {
-                            // Cost Impact (placeholder for now)
-                            const costImpactCol = colIndex++;
-                            ws[`${colLetter(costImpactCol)}${rowNum}`] = { v: 0, t: 'n' };
-                        }
+                    // Volume Impact = (Next Volume - This Volume) × This Price
+                    ws[`${colLetter(volumeImpactCol)}${rowNum}`] = {
+                        f: `(${colLetter(nextVolCol)}${rowNum}-${colLetter(thisVolCol)}${rowNum})*${colLetter(thisPriceCol)}${rowNum}`,
+                        t: 'n'
+                    };
+
+                    // Mix Impact = (Next Sales - This Sales) - Price Impact - Volume Impact
+                    ws[`${colLetter(mixImpactCol)}${rowNum}`] = {
+                        f: `(${colLetter(nextSalesCol)}${rowNum}-${colLetter(thisSalesCol)}${rowNum})-${colLetter(priceImpactCol)}${rowNum}-${colLetter(volumeImpactCol)}${rowNum}`,
+                        t: 'n'
+                    };
+
+                    if (config.mode === 'gm') {
+                        // Cost Impact (placeholder for now)
+                        const costImpactCol = costImpactStartCol + j;
+                        ws[`${colLetter(costImpactCol)}${rowNum}`] = { v: 0, t: 'n' };
                     }
                 }
             }
@@ -464,6 +556,61 @@ const ExcelExport = {
                 }
             }
         }
+
+        // Format header row (black background, white text)
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cell_address = XLSX.utils.encode_cell({r: 0, c: C});
+            if (!ws[cell_address]) continue;
+
+            ws[cell_address].s = {
+                fill: { fgColor: { rgb: "000000" } },
+                font: { color: { rgb: "FFFFFF" }, bold: true },
+                alignment: { horizontal: "center", vertical: "center" }
+            };
+        }
+
+        // Add borders between KPI groups (multi-year mode only)
+        if (isMultiYear && fiscalYears.length > 0) {
+            const numYears = fiscalYears.length;
+            const numBridges = numYears - 1;
+
+            // Calculate KPI group boundaries (column indices where borders should be added)
+            const salesStartCol = dimCount;
+            const volumeStartCol = dimCount + numYears;
+            const priceStartCol = dimCount + 2 * numYears;
+            const priceImpactStartCol = dimCount + 3 * numYears;
+            const volumeImpactStartCol = priceImpactStartCol + numBridges;
+            const mixImpactStartCol = volumeImpactStartCol + numBridges;
+
+            const borderCols = [
+                salesStartCol,
+                volumeStartCol,
+                priceStartCol,
+                priceImpactStartCol,
+                volumeImpactStartCol,
+                mixImpactStartCol
+            ];
+
+            // Add left border to each KPI group
+            for (let R = range.s.r; R <= range.e.r; ++R) {
+                for (const col of borderCols) {
+                    if (col > dimCount) { // Don't add border before first KPI group
+                        const cell_address = XLSX.utils.encode_cell({r: R, c: col});
+                        if (!ws[cell_address]) {
+                            ws[cell_address] = { t: 's', v: '' };
+                        }
+                        ws[cell_address].s = ws[cell_address].s || {};
+                        ws[cell_address].s.border = {
+                            left: { style: 'medium', color: { rgb: '000000' } }
+                        };
+                    }
+                }
+            }
+        }
+
+        // Remove gridlines
+        ws['!cols'] = ws['!cols'] || cols;
+        ws['!views'] = [{ showGridLines: false }];
 
         return ws;
     },
