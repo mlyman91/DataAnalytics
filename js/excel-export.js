@@ -23,8 +23,11 @@ const ExcelExport = {
      * @param {Object} config - Analysis configuration
      */
     exportToExcel: function(bridgeResults, aggregationResults, config) {
-        // Create workbook
+        // Create workbook with cell styles enabled
         const wb = XLSX.utils.book_new();
+        wb.Workbook = wb.Workbook || {};
+        wb.Workbook.Views = wb.Workbook.Views || [{}];
+        wb.Workbook.Views[0] = wb.Workbook.Views[0] || {};
         
         // Tab 1: Summary Bridge
         const summarySheet = this._createSummarySheet(bridgeResults.summary, config, aggregationResults.negatives);
@@ -46,7 +49,7 @@ const ExcelExport = {
         const timestamp = new Date().toISOString().slice(0, 10);
         const modeLabel = config.mode === 'gm' ? 'GM_Bridge' : 'PVM_Bridge';
         const filename = `${modeLabel}_${timestamp}.xlsx`;
-        
+
         // Trigger download
         XLSX.writeFile(wb, filename);
     },
@@ -242,28 +245,32 @@ const ExcelExport = {
         let headerRow;
 
         if (isMultiYear) {
-            // Multi-year mode: header grouped by KPI (all sales, all volume, all price, all impacts)
+            // Multi-year mode: header grouped by KPI with blank columns between groups for visual separation
             headerRow = [...dimensions];
 
             // Group 1: Annual Sales for all years
+            headerRow.push(''); // Blank column for separation
             for (let i = 0; i < fiscalYears.length; i++) {
                 const fyLabel = fiscalYears[i].label || `FY ${fiscalYears[i].fiscalYear}`;
                 headerRow.push(`${fyLabel} Sales`);
             }
 
             // Group 2: Annual Volume for all years
+            headerRow.push(''); // Blank column for separation
             for (let i = 0; i < fiscalYears.length; i++) {
                 const fyLabel = fiscalYears[i].label || `FY ${fiscalYears[i].fiscalYear}`;
                 headerRow.push(`${fyLabel} Volume`);
             }
 
             // Group 3: Annual Avg Price for all years
+            headerRow.push(''); // Blank column for separation
             for (let i = 0; i < fiscalYears.length; i++) {
                 const fyLabel = fiscalYears[i].label || `FY ${fiscalYears[i].fiscalYear}`;
                 headerRow.push(`${fyLabel} Avg Price`);
             }
 
             // Group 4: Price Impacts (YoY)
+            headerRow.push(''); // Blank column for separation
             for (let i = 0; i < fiscalYears.length - 1; i++) {
                 const fy = fiscalYears[i];
                 const nextFY = fiscalYears[i + 1];
@@ -272,6 +279,7 @@ const ExcelExport = {
             }
 
             // Group 5: Volume Impacts (YoY)
+            headerRow.push(''); // Blank column for separation
             for (let i = 0; i < fiscalYears.length - 1; i++) {
                 const fy = fiscalYears[i];
                 const nextFY = fiscalYears[i + 1];
@@ -280,6 +288,7 @@ const ExcelExport = {
             }
 
             // Group 6: Mix Impacts (YoY)
+            headerRow.push(''); // Blank column for separation
             for (let i = 0; i < fiscalYears.length - 1; i++) {
                 const fy = fiscalYears[i];
                 const nextFY = fiscalYears[i + 1];
@@ -289,6 +298,7 @@ const ExcelExport = {
 
             // Group 7: Cost Impacts (YoY) - if GM mode
             if (config.mode === 'gm') {
+                headerRow.push(''); // Blank column for separation
                 for (let i = 0; i < fiscalYears.length - 1; i++) {
                     const fy = fiscalYears[i];
                     const nextFY = fiscalYears[i + 1];
@@ -296,7 +306,7 @@ const ExcelExport = {
                     headerRow.push(`${bridgeLabel} Cost Impact`);
                 }
             }
-        } else {
+        } else{
             // Two-period mode: original behavior
             const pyLabel = config.pyLabel || 'PY';
             const cyLabel = config.cyLabel || 'CY';
@@ -328,10 +338,11 @@ const ExcelExport = {
             const row = detail[i];
 
             if (isMultiYear) {
-                // Multi-year mode: populate grouped by KPI
+                // Multi-year mode: populate grouped by KPI with blank columns between groups
                 const dataRow = [...dimensions.map(d => row.dimensions[d] || 'Unknown')];
 
                 // Group 1: Annual Sales for all years
+                dataRow.push(''); // Blank column for separation
                 for (let j = 0; j < fiscalYears.length; j++) {
                     const fy = fiscalYears[j].fiscalYear;
                     const yearData = row.years[fy] || { sales: 0, volume: 0, price: 0 };
@@ -339,6 +350,7 @@ const ExcelExport = {
                 }
 
                 // Group 2: Annual Volume for all years
+                dataRow.push(''); // Blank column for separation
                 for (let j = 0; j < fiscalYears.length; j++) {
                     const fy = fiscalYears[j].fiscalYear;
                     const yearData = row.years[fy] || { sales: 0, volume: 0, price: 0 };
@@ -346,27 +358,32 @@ const ExcelExport = {
                 }
 
                 // Group 3: Annual Avg Price for all years (will be replaced with formulas)
+                dataRow.push(''); // Blank column for separation
                 for (let j = 0; j < fiscalYears.length; j++) {
                     dataRow.push(0); // Placeholder for formula
                 }
 
                 // Group 4: Price Impacts (YoY) - placeholders for formulas
+                dataRow.push(''); // Blank column for separation
                 for (let j = 0; j < fiscalYears.length - 1; j++) {
                     dataRow.push(0);
                 }
 
                 // Group 5: Volume Impacts (YoY) - placeholders for formulas
+                dataRow.push(''); // Blank column for separation
                 for (let j = 0; j < fiscalYears.length - 1; j++) {
                     dataRow.push(0);
                 }
 
                 // Group 6: Mix Impacts (YoY) - placeholders for formulas
+                dataRow.push(''); // Blank column for separation
                 for (let j = 0; j < fiscalYears.length - 1; j++) {
                     dataRow.push(0);
                 }
 
                 // Group 7: Cost Impacts (YoY) - placeholders for formulas (if GM mode)
                 if (config.mode === 'gm') {
+                    dataRow.push(''); // Blank column for separation
                     for (let j = 0; j < fiscalYears.length - 1; j++) {
                         dataRow.push(0);
                     }
@@ -409,17 +426,19 @@ const ExcelExport = {
 
         if (isMultiYear) {
             // Multi-year mode: add formulas for grouped columns
+            // Note: Each group has a blank separator column before it
             const numYears = fiscalYears.length;
             const numBridges = numYears - 1;
+            const numCostImpactCols = config.mode === 'gm' ? 1 : 0;
 
-            // Calculate column positions for each group
-            const salesStartCol = dimCount;
-            const volumeStartCol = dimCount + numYears;
-            const priceStartCol = dimCount + 2 * numYears;
-            const priceImpactStartCol = dimCount + 3 * numYears;
-            const volumeImpactStartCol = priceImpactStartCol + numBridges;
-            const mixImpactStartCol = volumeImpactStartCol + numBridges;
-            const costImpactStartCol = config.mode === 'gm' ? mixImpactStartCol + numBridges : -1;
+            // Calculate column positions for each group (accounting for blank separator columns)
+            const salesStartCol = dimCount + 1; // +1 for blank column before sales group
+            const volumeStartCol = salesStartCol + numYears + 1; // +1 for blank column before volume group
+            const priceStartCol = volumeStartCol + numYears + 1; // +1 for blank column before price group
+            const priceImpactStartCol = priceStartCol + numYears + 1; // +1 for blank column before price impact group
+            const volumeImpactStartCol = priceImpactStartCol + numBridges + 1; // +1 for blank column
+            const mixImpactStartCol = volumeImpactStartCol + numBridges + 1; // +1 for blank column
+            const costImpactStartCol = config.mode === 'gm' ? mixImpactStartCol + numBridges + 1 : -1;
 
             for (let i = 0; i < detail.length; i++) {
                 const rowNum = i + 2; // Excel row number (1-indexed, +1 for header)
@@ -528,6 +547,9 @@ const ExcelExport = {
                 cols.push({ wch: CONFIG.EXCEL.COL_WIDTH_DIMENSION });
             } else if (headerRow[i] === 'Status') {
                 cols.push({ wch: 12 });
+            } else if (headerRow[i] === '') {
+                // Narrow separator columns
+                cols.push({ wch: 2 });
             } else {
                 cols.push({ wch: CONFIG.EXCEL.COL_WIDTH_NUMBER });
             }
@@ -557,56 +579,9 @@ const ExcelExport = {
             }
         }
 
-        // Format header row (black background, white text)
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-            const cell_address = XLSX.utils.encode_cell({r: 0, c: C});
-            if (!ws[cell_address]) continue;
-
-            ws[cell_address].s = {
-                fill: { fgColor: { rgb: "000000" } },
-                font: { color: { rgb: "FFFFFF" }, bold: true },
-                alignment: { horizontal: "center", vertical: "center" }
-            };
-        }
-
-        // Add borders between KPI groups (multi-year mode only)
-        if (isMultiYear && fiscalYears.length > 0) {
-            const numYears = fiscalYears.length;
-            const numBridges = numYears - 1;
-
-            // Calculate KPI group boundaries (column indices where borders should be added)
-            const salesStartCol = dimCount;
-            const volumeStartCol = dimCount + numYears;
-            const priceStartCol = dimCount + 2 * numYears;
-            const priceImpactStartCol = dimCount + 3 * numYears;
-            const volumeImpactStartCol = priceImpactStartCol + numBridges;
-            const mixImpactStartCol = volumeImpactStartCol + numBridges;
-
-            const borderCols = [
-                salesStartCol,
-                volumeStartCol,
-                priceStartCol,
-                priceImpactStartCol,
-                volumeImpactStartCol,
-                mixImpactStartCol
-            ];
-
-            // Add left border to each KPI group
-            for (let R = range.s.r; R <= range.e.r; ++R) {
-                for (const col of borderCols) {
-                    if (col > dimCount) { // Don't add border before first KPI group
-                        const cell_address = XLSX.utils.encode_cell({r: R, c: col});
-                        if (!ws[cell_address]) {
-                            ws[cell_address] = { t: 's', v: '' };
-                        }
-                        ws[cell_address].s = ws[cell_address].s || {};
-                        ws[cell_address].s.border = {
-                            left: { style: 'medium', color: { rgb: '000000' } }
-                        };
-                    }
-                }
-            }
-        }
+        // Note: Cell styling (background colors, borders) requires SheetJS Pro.
+        // We use blank separator columns (width: 2) between KPI groups for visual separation.
+        // Users can manually format the header row in Excel after opening the file.
 
         // Remove gridlines
         ws['!cols'] = ws['!cols'] || cols;
