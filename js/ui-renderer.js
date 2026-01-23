@@ -338,6 +338,196 @@ const UIRenderer = {
     },
 
     /**
+     * Render bridge waterfall chart
+     */
+    renderBridgeChart: function(summary, mode) {
+        const canvas = document.getElementById('bridge-chart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+
+        // Destroy existing chart if it exists
+        if (window.bridgeChartInstance) {
+            window.bridgeChartInstance.destroy();
+        }
+
+        let labels = [];
+        let data = [];
+        let colors = [];
+        let runningTotal = 0;
+
+        if (summary.years) {
+            // Multi-year mode
+            const years = Object.keys(summary.years).sort((a, b) => Number(a) - Number(b));
+
+            for (let i = 0; i < years.length; i++) {
+                const year = years[i];
+                const yearData = summary.years[year];
+
+                // Add year total
+                labels.push(`FY ${year}`);
+                data.push([0, yearData.value]);
+                colors.push('#003B5C'); // Dark blue for totals
+                runningTotal = yearData.value;
+
+                // If not the last year, show bridge to next year
+                if (i < years.length - 1) {
+                    const nextYear = years[i + 1];
+                    const bridgeKey = `${year}-${nextYear}`;
+                    const bridge = summary.bridges[bridgeKey];
+
+                    if (bridge) {
+                        // Price Impact
+                        labels.push(`${year}→${nextYear}\nPrice`);
+                        const priceStart = runningTotal;
+                        runningTotal += bridge.priceImpact;
+                        data.push([priceStart, runningTotal]);
+                        colors.push(bridge.priceImpact >= 0 ? '#10B981' : '#EF4444');
+
+                        // Volume Impact
+                        labels.push(`${year}→${nextYear}\nVolume`);
+                        const volStart = runningTotal;
+                        runningTotal += bridge.volumeImpact;
+                        data.push([volStart, runningTotal]);
+                        colors.push(bridge.volumeImpact >= 0 ? '#10B981' : '#EF4444');
+
+                        // Mix Impact
+                        labels.push(`${year}→${nextYear}\nMix`);
+                        const mixStart = runningTotal;
+                        runningTotal += bridge.mixImpact;
+                        data.push([mixStart, runningTotal]);
+                        colors.push(bridge.mixImpact >= 0 ? '#10B981' : '#EF4444');
+
+                        // Cost Impact (if GM mode)
+                        if (mode === 'gm' && bridge.costImpact !== 0) {
+                            labels.push(`${year}→${nextYear}\nCost`);
+                            const costStart = runningTotal;
+                            runningTotal += bridge.costImpact;
+                            data.push([costStart, runningTotal]);
+                            colors.push(bridge.costImpact >= 0 ? '#10B981' : '#EF4444');
+                        }
+                    }
+                }
+            }
+        } else {
+            // Two-period mode
+            labels = ['Prior Year'];
+            data = [[0, summary.py.value]];
+            colors = ['#003B5C'];
+            runningTotal = summary.py.value;
+
+            // Price Impact
+            labels.push('Price\nImpact');
+            const priceStart = runningTotal;
+            runningTotal += summary.priceImpact;
+            data.push([priceStart, runningTotal]);
+            colors.push(summary.priceImpact >= 0 ? '#10B981' : '#EF4444');
+
+            // Volume Impact
+            labels.push('Volume\nImpact');
+            const volStart = runningTotal;
+            runningTotal += summary.volumeImpact;
+            data.push([volStart, runningTotal]);
+            colors.push(summary.volumeImpact >= 0 ? '#10B981' : '#EF4444');
+
+            // Mix Impact
+            labels.push('Mix\nImpact');
+            const mixStart = runningTotal;
+            runningTotal += summary.mixImpact;
+            data.push([mixStart, runningTotal]);
+            colors.push(summary.mixImpact >= 0 ? '#10B981' : '#EF4444');
+
+            // Cost Impact (if GM mode)
+            if (mode === 'gm' && summary.costImpact !== 0) {
+                labels.push('Cost\nImpact');
+                const costStart = runningTotal;
+                runningTotal += summary.costImpact;
+                data.push([costStart, runningTotal]);
+                colors.push(summary.costImpact >= 0 ? '#10B981' : '#EF4444');
+            }
+
+            // Current Year Total
+            labels.push('Current Year');
+            data.push([0, summary.cy.value]);
+            colors.push('#003B5C');
+        }
+
+        // Create chart
+        window.bridgeChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderColor: colors.map(c => c),
+                    borderWidth: 1,
+                    barThickness: 60
+                }]
+            },
+            options: {
+                indexAxis: 'x',
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.parsed.y - context.parsed._custom.barStart;
+                                return 'Impact: ' + new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                }).format(value);
+                            },
+                            afterLabel: function(context) {
+                                return 'Total: ' + new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                }).format(context.parsed.y);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 11
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                }).format(value);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+
+    /**
      * Render detail table header
      */
     renderDetailTableHeader: function(dimensions, mode, pyLabel, cyLabel, isMultiYear = false, fiscalYears = []) {

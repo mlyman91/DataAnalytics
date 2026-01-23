@@ -468,6 +468,9 @@ Object.assign(App, {
         // Bridge summary table
         UIRenderer.renderBridgeSummary(summary, mode, aggregationResults.negatives);
 
+        // Bridge waterfall chart
+        UIRenderer.renderBridgeChart(summary, mode);
+
         // Detail table
         UIRenderer.renderDetailTableHeader(selectedDimensions, mode, this.state.pyLabel, this.state.cyLabel, isMultiYear, fiscalYears);
         this.renderDetailTable();
