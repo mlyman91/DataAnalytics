@@ -354,6 +354,7 @@ const UIRenderer = {
         let labels = [];
         let data = [];
         let colors = [];
+        let impactValues = []; // Store actual impact values for labels
         let runningTotal = 0;
 
         if (summary.years) {
@@ -368,6 +369,7 @@ const UIRenderer = {
                 labels.push(`FY ${year}`);
                 data.push([0, yearData.value]);
                 colors.push('#003B5C'); // Dark blue for totals
+                impactValues.push(yearData.value);
                 runningTotal = yearData.value;
 
                 // If not the last year, show bridge to next year
@@ -383,6 +385,7 @@ const UIRenderer = {
                         runningTotal += bridge.priceImpact;
                         data.push([priceStart, runningTotal]);
                         colors.push(bridge.priceImpact >= 0 ? '#10B981' : '#EF4444');
+                        impactValues.push(bridge.priceImpact);
 
                         // Volume Impact
                         labels.push(`${year}→${nextYear}\nVolume`);
@@ -390,6 +393,7 @@ const UIRenderer = {
                         runningTotal += bridge.volumeImpact;
                         data.push([volStart, runningTotal]);
                         colors.push(bridge.volumeImpact >= 0 ? '#10B981' : '#EF4444');
+                        impactValues.push(bridge.volumeImpact);
 
                         // Mix Impact
                         labels.push(`${year}→${nextYear}\nMix`);
@@ -397,6 +401,7 @@ const UIRenderer = {
                         runningTotal += bridge.mixImpact;
                         data.push([mixStart, runningTotal]);
                         colors.push(bridge.mixImpact >= 0 ? '#10B981' : '#EF4444');
+                        impactValues.push(bridge.mixImpact);
 
                         // Cost Impact (if GM mode)
                         if (mode === 'gm' && bridge.costImpact !== 0) {
@@ -405,6 +410,7 @@ const UIRenderer = {
                             runningTotal += bridge.costImpact;
                             data.push([costStart, runningTotal]);
                             colors.push(bridge.costImpact >= 0 ? '#10B981' : '#EF4444');
+                            impactValues.push(bridge.costImpact);
                         }
                     }
                 }
@@ -414,6 +420,7 @@ const UIRenderer = {
             labels = ['Prior Year'];
             data = [[0, summary.py.value]];
             colors = ['#003B5C'];
+            impactValues = [summary.py.value];
             runningTotal = summary.py.value;
 
             // Price Impact
@@ -422,6 +429,7 @@ const UIRenderer = {
             runningTotal += summary.priceImpact;
             data.push([priceStart, runningTotal]);
             colors.push(summary.priceImpact >= 0 ? '#10B981' : '#EF4444');
+            impactValues.push(summary.priceImpact);
 
             // Volume Impact
             labels.push('Volume\nImpact');
@@ -429,6 +437,7 @@ const UIRenderer = {
             runningTotal += summary.volumeImpact;
             data.push([volStart, runningTotal]);
             colors.push(summary.volumeImpact >= 0 ? '#10B981' : '#EF4444');
+            impactValues.push(summary.volumeImpact);
 
             // Mix Impact
             labels.push('Mix\nImpact');
@@ -436,6 +445,7 @@ const UIRenderer = {
             runningTotal += summary.mixImpact;
             data.push([mixStart, runningTotal]);
             colors.push(summary.mixImpact >= 0 ? '#10B981' : '#EF4444');
+            impactValues.push(summary.mixImpact);
 
             // Cost Impact (if GM mode)
             if (mode === 'gm' && summary.costImpact !== 0) {
@@ -444,13 +454,28 @@ const UIRenderer = {
                 runningTotal += summary.costImpact;
                 data.push([costStart, runningTotal]);
                 colors.push(summary.costImpact >= 0 ? '#10B981' : '#EF4444');
+                impactValues.push(summary.costImpact);
             }
 
             // Current Year Total
             labels.push('Current Year');
             data.push([0, summary.cy.value]);
             colors.push('#003B5C');
+            impactValues.push(summary.cy.value);
         }
+
+        // Helper function to format values in thousands
+        const formatInThousands = function(value) {
+            const absValue = Math.abs(value);
+            const sign = value < 0 ? '-' : '';
+            if (absValue >= 1000000) {
+                return sign + '$' + (absValue / 1000000).toFixed(1) + 'M';
+            } else if (absValue >= 1000) {
+                return sign + '$' + (absValue / 1000).toFixed(0) + 'K';
+            } else {
+                return sign + '$' + absValue.toFixed(0);
+            }
+        };
 
         // Create chart
         window.bridgeChartInstance = new Chart(ctx, {
@@ -496,6 +521,20 @@ const UIRenderer = {
                                 }).format(context.parsed.y);
                             }
                         }
+                    },
+                    datalabels: {
+                        color: '#FFFFFF',
+                        font: {
+                            weight: 'bold',
+                            size: 12
+                        },
+                        formatter: function(value, context) {
+                            // Get the actual impact value for this bar
+                            const impactValue = impactValues[context.dataIndex];
+                            return formatInThousands(impactValue);
+                        },
+                        anchor: 'center',
+                        align: 'center'
                     }
                 },
                 scales: {
@@ -523,7 +562,8 @@ const UIRenderer = {
                         }
                     }
                 }
-            }
+            },
+            plugins: [ChartDataLabels]
         });
     },
 
